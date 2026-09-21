@@ -14,5 +14,6 @@ class Usuario:
     status: StatusUsuario
     matricula: Optional[str] = None
 
-    def get_nome_completo(self) -> str:
-        return f'{self.primeiro_nome} {self.sobrenome}'
+    @property
+    def nome_completo(self) -> str:
+        return f"{self.primeiro_nome} {self.sobrenome}".strip()
