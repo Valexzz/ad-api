@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     senha_usuario_service_account_ad: str
     dn_base_ad: str
     timeout_ldap: int = 5
+    debug: bool = False
 
     model_config = SettingsConfigDict(env_file=".env")
 

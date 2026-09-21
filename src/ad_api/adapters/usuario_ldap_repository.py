@@ -13,8 +13,13 @@ from ad_api.utils import obter_valor_atributo_ad
 class UsuarioLdapRepository(UsuarioRepository):
     HEX_CONTA_INATIVA = 0x0002
 
-    def __init__(self, ldap_client: LdapClient):
+    def __init__(
+            self,
+            ldap_client: LdapClient,
+            base_dn: Optional[str] = None
+    ):
         self.ldap_client = ldap_client
+        self.base_dn = base_dn or settings.dn_base_ad
 
 
     def buscar_por_login(self, login: str) -> Optional[Usuario]:
@@ -24,7 +29,7 @@ class UsuarioLdapRepository(UsuarioRepository):
 
         with self.ldap_client.get_conn() as conn:
             conn.search(
-                search_base=settings.dn_base_ad,
+                search_base=self.base_dn,
                 search_filter=filtro,
                 attributes=atributos,
             )

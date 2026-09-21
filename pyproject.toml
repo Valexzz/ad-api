@@ -24,6 +24,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "pytest-env>=1.7.1",
+    "testcontainers>=4.15.0",
 ]
 
 [tool.pytest.ini_options]
