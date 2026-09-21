@@ -1,0 +1,41 @@
+  services:
+    samba-ad:
+      image: diegogslomp/samba-ad-dc:latest
+      container_name: samba-ad
+
+      hostname: ad
+      privileged: true
+      restart: unless-stopped
+
+      environment:
+        REALM: ${DOMINIO_AD}
+        DOMAIN: ${DOMAIN_AD}
+        ADMIN_PASS: ${SENHA_USUARIO_SERVICE_ACCOUNT_AD}
+
+        DNS_FORWARDER: "8.8.8.8"
+        BIND_NETWORK_INTERFACES: "false"
+
+      ports:
+        - "389:389"
+        - "636:636"
+        - "53:53/tcp"
+        - "53:53/udp"
+        - "88:88/tcp"
+        - "88:88/udp"
+        - "135:135"
+        - "139:139"
+        - "445:445"
+        - "464:464/tcp"
+        - "464:464/udp"
+        - "3268:3268"
+        - "3269:3269"
+
+      volumes:
+        - samba-etc:/usr/local/samba/etc
+        - samba-private:/usr/local/samba/private
+        - samba-var:/usr/local/samba/var
+
+  volumes:
+    samba-etc:
+    samba-private:
+    samba-var:
