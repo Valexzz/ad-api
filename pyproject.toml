@@ -11,6 +11,7 @@ dependencies = [
     "fastapi[standard]>=0.141.1",
     "ldap3>=2.9.1",
     "pytest>=9.1.1",
+    "python-dotenv>=1.2.3",
 ]
 
 [project.scripts]
@@ -19,3 +20,11 @@ ad-api = "ad_api:main"
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest-env>=1.7.1",
+]
+
+[tool.pytest.ini_options]
+env_files = [".env.test"]

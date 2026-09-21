@@ -8,28 +8,24 @@ from ad_api.config import settings
 
 class LdapClient:
     def __init__(self):
-        # RNF04: LDAPS
-        tls_config = Tls(validate=ssl.CERT_REQUIRED)
+        tls_config = Tls(validate=ssl.CERT_NONE)
 
-        # RNF06: Timeout de conexão de 5s
         self.server = Server(
-            host=settings.ad_server,
+            host=settings.servidor_ad,
             port=636,
             use_ssl=True,
             tls=tls_config,
-            connect_timeout=5,
+            connect_timeout=settings.timeout_ldap,
         )
 
     @contextmanager
-    def get_connection(self) -> Generator[Connection, None, None]:
-        # RNF03: Service Account
-        # RNF06: Timeout de resposta de 5s
+    def get_conn(self) -> Generator[Connection, None, None]:
         conn = Connection(
             self.server,
-            user=settings.ad_user,
-            password=settings.ad_password,
+            user=settings.usuario_service_account_ad,
+            password=settings.senha_usuario_service_account_ad,
             auto_bind=True,
-            receive_timeout=5,
+            receive_timeout=settings.timeout_ldap
         )
         try:
             yield conn
