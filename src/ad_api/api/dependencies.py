@@ -1,3 +1,5 @@
+import hashlib
+
 from fastapi import Security, HTTPException
 from fastapi.security import APIKeyHeader
 from starlette import status
@@ -17,8 +19,12 @@ def get_usuario_service() -> UsuarioService:
 api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
 
 def verificar_api_key(api_key: str = Security(api_key_header)):
-    if not api_key or api_key != settings.chave_api:
-        raise ChaveApiInvalidaError(
-            "Chave de API inválida ou ausente"
-        )
+    if not api_key:
+        raise ChaveApiInvalidaError("Chave de API ausente")
+
+    hash_recebido = hashlib.sha256(api_key.encode()).hexdigest()
+
+    if hash_recebido != settings.chave_api_hash:
+        raise ChaveApiInvalidaError("Chave de API inválida")
+
     return api_key

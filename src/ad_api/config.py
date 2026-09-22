@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     chars_especiais_senha_ad: str = r"!@#$%&*"
     dias_expiracao_senha_ad: int = 90
 
-    chave_api: str = "chave-api-padrao"
+    # HASH DE 'chave-api-padrao'
+    chave_api_hash: str = "2fce749a4c73c22c367d1f9d80c1d48e3eff8798d96c0ca53c6e94798c7481a3"
 
     log_level: str = "INFO"
     model_config = SettingsConfigDict(env_file=".env")

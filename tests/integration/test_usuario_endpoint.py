@@ -241,7 +241,7 @@ def test_redefinir_senha_com_senha_fraca_deve_retornar_status_400(client_com_ad)
 
 def test_deve_permitir_acesso_com_api_key_valida(client_sem_override_api_key):
     # Envia o header "x-api-key" com a chave correta configurada nas settings
-    headers = {"x-api-key": settings.chave_api}
+    headers = {"x-api-key": "chave-api-padrao"}
 
     response = client_sem_override_api_key.get(
         f"/usuarios/{LOGIN_USUARIO_ATIVO}",
