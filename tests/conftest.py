@@ -8,7 +8,7 @@ from testcontainers.core.container import DockerContainer
 
 from ad_api.adapters.conn import LdapClient
 from ad_api.adapters.usuario_ldap_repository import UsuarioLdapRepository
-from ad_api.api.dependencies import get_usuario_service
+from ad_api.api.dependencies import get_usuario_service, verificar_api_key
 from ad_api.domain.model import Usuario, StatusUsuario
 from ad_api.domain.ports import UsuarioRepository
 from ad_api.errors import UsuarioNaoEncontradoError
@@ -254,9 +254,37 @@ def samba_ad_container():
             "bind_password": "MinhaSenhaForte123",
         }
 
+def override_verificar_api_key():
+    return "chave-valida-de-teste"
+
+#Por padrão, noa necessita de validar chave de API
 @pytest.fixture
 def client_com_ad(samba_ad_container):
     """Configura o FastAPI para usar o container do Samba e retorna o TestClient."""
+    real_client = LdapClient(
+        server=samba_ad_container["host"],
+        port=samba_ad_container["port"],
+        user=f"Administrator@{samba_ad_container['domain']}",
+        password=samba_ad_container["bind_password"],
+        use_ssl=True,
+    )
+
+    def override_get_service():
+        repository = UsuarioLdapRepository(ldap_client=real_client, base_dn=samba_ad_container["base_dn"])
+        return UsuarioService(usuario_repository=repository)
+
+    app.dependency_overrides[get_usuario_service] = override_get_service
+
+    app.dependency_overrides[verificar_api_key] = override_verificar_api_key
+
+    with TestClient(app) as client:
+        yield client
+
+    app.dependency_overrides.clear()
+
+# Fixture SEM OVERRIDE da API Key (para testar a segurança exigida no RNF01)
+@pytest.fixture
+def client_sem_override_api_key(samba_ad_container):
     real_client = LdapClient(
         server=samba_ad_container["host"],
         port=samba_ad_container["port"],

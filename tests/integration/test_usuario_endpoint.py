@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from ad_api.adapters.conn import LdapClient
 from ad_api.adapters.usuario_ldap_repository import UsuarioLdapRepository
-from ad_api.api.dependencies import get_usuario_service
+from ad_api.api.dependencies import get_usuario_service, verificar_api_key
 from ad_api.config import settings
 from ad_api.main import app
 from ad_api.services.usuario_service import UsuarioService
@@ -44,9 +44,12 @@ def test_buscar_sem_conexao_deve_retornar_status_502():
 
     def override_sem_conexao():
         repo = UsuarioLdapRepository(ldap_client=client_sem_rede)
+
         return UsuarioService(usuario_repository=repo)
 
     app.dependency_overrides[get_usuario_service] = override_sem_conexao
+
+    app.dependency_overrides[verificar_api_key] = lambda: "token-valido-fake"
 
     with TestClient(app) as client:
         response = client.get("/usuarios/qualquer.usuario")
@@ -154,7 +157,7 @@ def test_reativar_usuario_deve_retornar_status_200_e_usuario_atualizado(client_c
         "container_dn": "CN=Users,DC=empresa,DC=local"
     }
 
-    response = client_com_ad.put(f"/usuarios/{LOGIN_USUARIO_INATIVO_INTEGRACAO}", json=payload_reativacao)
+    response = client_com_ad.patch(f"/usuarios/{LOGIN_USUARIO_INATIVO_INTEGRACAO}/desativar", json=payload_reativacao)
 
     assert response.status_code == 200
     dados = response.json()
@@ -168,7 +171,7 @@ def test_reativar_usuario_inexistente_deve_retornar_status_404(client_com_ad):
         "trocar_senha": False
     }
 
-    response = client_com_ad.put(f"/usuarios/{LOGIN_INEXISTENTE}", json=payload)
+    response = client_com_ad.patch(f"/usuarios/{LOGIN_INEXISTENTE}/desativar", json=payload)
 
     assert response.status_code == 404
     dados = response.json()
@@ -183,7 +186,7 @@ def test_reativar_usuario_com_senha_fora_da_politica_deve_retornar_status_400(cl
         "trocar_senha": False
     }
 
-    response = client_com_ad.put(f"/usuarios/{LOGIN_USUARIO_INATIVO_INTEGRACAO}", json=payload)
+    response = client_com_ad.patch(f"/usuarios/{LOGIN_USUARIO_INATIVO_INTEGRACAO}/desativar", json=payload)
 
     assert response.status_code == 400
     dados = response.json()
@@ -234,3 +237,32 @@ def test_redefinir_senha_com_senha_fraca_deve_retornar_status_400(client_com_ad)
     dados = response.json()
     assert dados["codigo"] == "SENHA_INVALIDA"
     assert "A senha não atende aos requisitos" in dados["mensagem"]
+
+
+def test_deve_permitir_acesso_com_api_key_valida(client_sem_override_api_key):
+    # Envia o header "x-api-key" com a chave correta configurada nas settings
+    headers = {"x-api-key": settings.chave_api}
+
+    response = client_sem_override_api_key.get(
+        f"/usuarios/{LOGIN_USUARIO_ATIVO}",
+        headers=headers
+    )
+
+    assert response.status_code == 200
+    dados = response.json()
+    assert dados["login"] == LOGIN_USUARIO_ATIVO
+
+
+def test_deve_retornar_401_ao_tentar_acessar_sem_api_key_ou_com_chave_invalida(client_sem_override_api_key):
+    # 1. Tentativa sem mandar o header x-api-key
+    response_sem_chave = client_sem_override_api_key.get(f"/usuarios/{LOGIN_USUARIO_ATIVO}")
+    assert response_sem_chave.status_code == 401
+    assert response_sem_chave.json()["codigo"] == "CHAVE_API_INVALIDA" # (ou o código que seu handler de 401 retorna)
+
+    # 2. Tentativa mandando uma chave incorreta
+    headers = {"x-api-key": "chave-errada-123"}
+    response_chave_errada = client_sem_override_api_key.get(
+        f"/usuarios/{LOGIN_USUARIO_ATIVO}",
+        headers=headers
+    )
+    assert response_chave_errada.status_code == 401
