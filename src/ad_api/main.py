@@ -18,7 +18,12 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("ad_api")
-app = FastAPI(title="API para comunicação com AD")
+app = FastAPI(
+
+    title="AD API",
+    version="0.1.0",
+    description="API para gerenciamento de identidades no Active Directory",
+)
 
 # Registra os handlers de erro (ordem: específicos primeiro, depois genéricos)
 app.add_exception_handler(UsuarioNaoEncontradoError, usuario_nao_encontrado_handler)

@@ -33,3 +33,7 @@ class UsuarioReativarRequest(BaseModel):
 class UsuarioRedefinirSenhaRequest(BaseModel):
     senha: str
     trocar_senha: bool = False
+
+class ModeloErro(BaseModel):
+    codigo: str
+    mensagem: str
