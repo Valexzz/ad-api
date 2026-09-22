@@ -53,7 +53,12 @@ class UsuarioService:
         logger.info(f"[CRIAR_USUARIO_SERVICE] - Usuário com login {usuario.login} criado com sucesso no repositório.")
         return usuario
 
-    def reativar_usuario(self, login: str, senha: Optional[str] = None, trocar_senha: bool = False, container_dn: Optional[str] = None) -> Usuario:
+    def reativar_usuario(self,
+                         login: str,
+                         senha: Optional[str] = None,
+                         trocar_senha: bool = False,
+                         mover_para_container_padrao: bool = False,
+                         container_dn: Optional[str] = None) -> Usuario:
         logger.info(f"[REATIVAR_USUARIO_SERVICE] - Iniciando processo de reativação para o login: {login}")
 
         if senha:
@@ -71,6 +76,7 @@ class UsuarioService:
             login=login,
             senha=senha,
             trocar_senha=trocar_senha,
+            mover_para_container_padrao=mover_para_container_padrao,
             container_dn=container_dn
         )
         logger.info(f"[REATIVAR_USUARIO_SERVICE] - Usuário com login {login} reativado com sucesso.")

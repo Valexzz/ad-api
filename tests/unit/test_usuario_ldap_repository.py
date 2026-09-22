@@ -391,10 +391,14 @@ def test_deve_reativar_usuario_e_mover_para_container_customizado(fake_ldap_clie
 
     container_customizado = f"OU=OutraOU,{base_dn}"
 
+    assert repo.container_padrao != container_customizado
+
     repo.reativar_usuario(
         login=LOGIN_USUARIO_INATIVO,
+        mover_para_container_padrao=True,
         container_dn=container_customizado
     )
+
 
     with fake_ldap_client.get_conn() as conn:
         conn.search(
@@ -436,6 +440,29 @@ def test_deve_definir_pwdlastset_zero_na_reativacao_quando_forcar_troca_senha_fo
         )
         assert len(conn.entries) == 1
         assert conn.entries[0]["pwdLastSet"].value == obter_datetime_ad_nunca()
+
+def test_deve_reativar_usuario_e_mover_para_container_padrao_quando_flag_for_true(fake_ldap_client):
+    base_dn = "DC=fake,DC=local"
+    dn_padrao_configurado = f"OU=ContainerPadrao,{base_dn}"
+
+    repo = UsuarioLdapRepository(
+        ldap_client=fake_ldap_client,
+        base_dn=base_dn,
+        dn_padrao=dn_padrao_configurado
+    )
+
+    repo.reativar_usuario(
+        login=LOGIN_USUARIO_INATIVO,
+        mover_para_container_padrao=True
+    )
+
+    with fake_ldap_client.get_conn() as conn:
+        conn.search(
+            search_base=dn_padrao_configurado,
+            search_filter=f"(sAMAccountName={LOGIN_USUARIO_INATIVO})",
+            attributes=["sAMAccountName"],
+        )
+        assert len(conn.entries) == 1, f"Usuário deveria estar em {dn_padrao_configurado}"
 
 # ==============================================================================
 # Testes: redefinir_senha (Repository)

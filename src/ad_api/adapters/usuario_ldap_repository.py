@@ -31,11 +31,13 @@ class UsuarioLdapRepository(UsuarioRepository):
             base_dn: Optional[str] = None,
             dn_padrao: Optional[str] = None,
             dias_expiracao_senha_ad: Optional[int] = None,
+            container_padrao: Optional[str] = None,
     ):
         self.ldap_client = ldap_client
         self.base_dn = base_dn or settings.dn_base_ad
         self.dn_padrao = dn_padrao or getattr(settings, "dn_padrao_ad", self.base_dn)
         self.dias_expiracao_senha_ad = dias_expiracao_senha_ad or getattr(settings, "dias_expiracao_senha_ad", 90)
+        self.container_padrao = container_padrao or getattr(settings, "dn_padrao_ad", self.dn_padrao)
 
     def buscar_por_login(self, login: str) -> Optional[Usuario]:
         logger.debug(f"[LDAP_BUSCAR] - Iniciando busca no AD para o login: {login}")
@@ -168,6 +170,7 @@ class UsuarioLdapRepository(UsuarioRepository):
             login: str,
             senha: Optional[str] = None,
             trocar_senha: bool = False,
+            mover_para_container_padrao: bool = False,
             container_dn: Optional[str] = None,
     ) -> Usuario:
         logger.info(f"[LDAP_REATIVAR] - Iniciando processo de reativação no AD para o login: {login}")
@@ -175,9 +178,11 @@ class UsuarioLdapRepository(UsuarioRepository):
             try:
                 dn_atual, uac_atual = self._obter_dados_iniciais(conn, login)
 
-                if container_dn:
-                    logger.debug(f"[LDAP_REATIVAR] - Movendo usuário {login} para o container: {container_dn}")
-                    dn_atual = self._mover_usuario(conn, dn_atual, container_dn)
+                container_destino = container_dn or (self.dn_padrao if mover_para_container_padrao else None)
+
+                if container_destino:
+                    logger.debug(f"[LDAP_REATIVAR] - Movendo usuário {login} para o container: {container_destino}")
+                    dn_atual = self._mover_usuario(conn, dn_atual, container_destino)
 
                 self._aplicar_reativacao_e_senha(conn, dn_atual, uac_atual, senha, trocar_senha)
 

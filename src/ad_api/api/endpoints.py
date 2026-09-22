@@ -105,7 +105,7 @@ def criar_usuario(
     return usuario_criado
 
 @router.patch(
-    "/{login}/desativar",
+    "/{login}/reativar",
     status_code=status.HTTP_200_OK,
     response_model=UsuarioResponse,
     summary="Reativar usuário",
@@ -149,6 +149,7 @@ def reativar_usuario(
         login=login,
         senha=payload.senha,
         trocar_senha=payload.trocar_senha,
+        mover_para_container_padrao=payload.mover_para_container_padrao,
         container_dn=payload.container_dn
     )
 

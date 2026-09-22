@@ -157,7 +157,7 @@ def test_reativar_usuario_deve_retornar_status_200_e_usuario_atualizado(client_c
         "container_dn": "CN=Users,DC=empresa,DC=local"
     }
 
-    response = client_com_ad.patch(f"/usuarios/{LOGIN_USUARIO_INATIVO_INTEGRACAO}/desativar", json=payload_reativacao)
+    response = client_com_ad.patch(f"/usuarios/{LOGIN_USUARIO_INATIVO_INTEGRACAO}/reativar", json=payload_reativacao)
 
     assert response.status_code == 200
     dados = response.json()
@@ -171,7 +171,7 @@ def test_reativar_usuario_inexistente_deve_retornar_status_404(client_com_ad):
         "trocar_senha": False
     }
 
-    response = client_com_ad.patch(f"/usuarios/{LOGIN_INEXISTENTE}/desativar", json=payload)
+    response = client_com_ad.patch(f"/usuarios/{LOGIN_INEXISTENTE}/reativar", json=payload)
 
     assert response.status_code == 404
     dados = response.json()
@@ -186,7 +186,7 @@ def test_reativar_usuario_com_senha_fora_da_politica_deve_retornar_status_400(cl
         "trocar_senha": False
     }
 
-    response = client_com_ad.patch(f"/usuarios/{LOGIN_USUARIO_INATIVO_INTEGRACAO}/desativar", json=payload)
+    response = client_com_ad.patch(f"/usuarios/{LOGIN_USUARIO_INATIVO_INTEGRACAO}/reativar", json=payload)
 
     assert response.status_code == 400
     dados = response.json()

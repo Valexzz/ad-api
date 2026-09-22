@@ -1,5 +1,6 @@
 services:
   ad-api:
+    image: ad_api
     build:
       context: .
       dockerfile: Dockerfile
