@@ -43,3 +43,20 @@ class UsuarioService:
         )
 
         return usuario
+
+    def reativar_usuario(self, login: str, senha: Optional[str] = None, trocar_senha: bool = False, container_dn: Optional[str] = None) -> Usuario:
+
+        if senha:
+            self.politica_senha.validar(senha)
+
+        usuario = self.repository.buscar_por_login(login)
+
+        if not usuario:
+            raise UsuarioNaoEncontradoError(f'Usuário com login {login} não encontrado')
+
+        return self.repository.reativar_usuario(
+            login=login,
+            senha=senha,
+            trocar_senha=trocar_senha,
+            container_dn=container_dn
+        )

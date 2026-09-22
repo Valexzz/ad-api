@@ -27,3 +27,22 @@ class UsuarioRepository(ABC):
         :param container_dn: OU ou container de destino. Se None, o repositório usa o padrão.
         """
         raise NotImplementedError
+
+    @abstractmethod
+    def reativar_usuario(
+            self,
+            login: str,
+            senha: Optional[str] = None,
+            trocar_senha: bool = False,
+            container_dn: Optional[str] = None,
+    ) -> Usuario:
+        """
+        Reativa uma conta desativada no AD, permitindo opcionalmente redefinir a senha
+        e/ou movê-la para uma nova OU/Container (RF02).
+
+        :param login: Login (sAMAccountName) do usuário a ser reativado.
+        :param senha: Opcional. Se informada, redefine a senha durante a reativação.
+        :param trocar_senha: Se True e houver senha, seta pwdLastSet = 0 (RN02).
+        :param container_dn: Opcional. Nova OU/Container de destino para mover o usuário.
+        """
+        raise NotImplementedError

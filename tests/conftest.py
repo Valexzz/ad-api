@@ -9,7 +9,7 @@ from testcontainers.core.container import DockerContainer
 from ad_api.adapters.conn import LdapClient
 from ad_api.adapters.usuario_ldap_repository import UsuarioLdapRepository
 from ad_api.api.dependencies import get_usuario_service
-from ad_api.domain.model import Usuario
+from ad_api.domain.model import Usuario, StatusUsuario
 from ad_api.domain.ports import UsuarioRepository
 from ad_api.main import app
 from ad_api.services.usuario_service import UsuarioService
@@ -42,6 +42,8 @@ MATRICULA_SEM_SEGUNDO_NOME = "44556"
 
 LOGIN_INEXISTENTE = "usuario.inexistente"
 
+LOGIN_USUARIO_INATIVO_INTEGRACAO = "usuario.inativo"
+
 
 class FakeLdapClient(LdapClient):
     def __init__(self, conn: Connection):
@@ -60,6 +62,10 @@ class FakeUsuarioRepository(UsuarioRepository):
         self.ultimo_forcar_troca_senha = None
         self.ultimo_container_dn = None
 
+        self.ultimo_login_reativado = None
+        self.ultima_senha_reativacao = None
+        self.ultimo_container_reativacao = None
+
     def buscar_por_login(self, login: str) -> Optional[Usuario]:
         return self._usuarios.get(login)
 
@@ -76,6 +82,24 @@ class FakeUsuarioRepository(UsuarioRepository):
         self.ultimo_container_dn = container_dn
         self._usuarios[usuario.login] = usuario
         return usuario
+
+    def reativar_usuario(
+            self,
+            login: str,
+            senha: Optional[str] = None,
+            trocar_senha: bool = False,
+            container_dn: Optional[str] = None,
+    ):
+        self.ultimo_login_reativado = login
+        self.ultima_senha_reativacao = senha
+        self.ultimo_container_reativacao = container_dn
+
+        usuario = self._usuarios.get(login)
+        if usuario:
+            usuario.status = StatusUsuario.ATIVO
+
+        return usuario
+
 
 @pytest.fixture
 def ldap_mock_conn():
@@ -162,7 +186,6 @@ def ldap_mock_conn():
 def fake_ldap_client(ldap_mock_conn):
     """Fixture utilitária que devolve o client pronto a ser injetado."""
     return FakeLdapClient(ldap_mock_conn)
-
 @pytest.fixture(scope="session")
 def samba_ad_container():
     container = (
@@ -187,6 +210,16 @@ def samba_ad_container():
             '--surname="Milhomem" '
             '--mail-address="victor@empresa.local"'
         )
+
+        # --- ADICIONE ESTE BLOCO PARA CRIAR E DESATIVAR UM USUÁRIO PARA OS TESTES DE REATIVAÇÃO ---
+        container.exec(
+            'samba-tool user create usuario.inativo Mudar@1234 '
+            '--given-name="Usuario" '
+            '--surname="Inativo"'
+        )
+        # Comando do Samba para desativar a conta logo na criação
+        container.exec('samba-tool user disable usuario.inativo')
+        # ---------------------------------------------------------------------------------------
 
         host_ip = container.get_container_host_ip()
         mapped_port_636 = int(container.get_exposed_port(636))

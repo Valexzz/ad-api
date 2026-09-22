@@ -23,3 +23,8 @@ class UsuarioRequest(BaseModel):
     sobrenome: Optional[str] = None
     matricula: Optional[str] = None
     container_dn: Optional[str] = None
+
+class UsuarioReativarRequest(BaseModel):
+    senha: str
+    trocar_senha: bool = False
+    container_dn: Optional[str] = None

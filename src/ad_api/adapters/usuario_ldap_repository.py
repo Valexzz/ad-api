@@ -12,7 +12,7 @@ from ad_api.domain.ports import UsuarioRepository
 from ad_api.errors import (
     InfraError,
     UsuarioJaExisteError,
-    UsuarioSemLoginError,
+    UsuarioSemLoginError, UsuarioNaoEncontradoError,
 )
 from ad_api.utils import obter_valor_atributo_ad
 
@@ -75,8 +75,16 @@ class UsuarioLdapRepository(UsuarioRepository):
             trocar_senha: bool = False,
             container_dn: Optional[str] = None,
     ) -> Usuario:
-        target_container = container_dn or self.dn_padrao
+        user_dn, atributos = self._preparar_dados_criacao(usuario, senha, trocar_senha, container_dn)
 
+        self._executar_criacao_no_ad(usuario.login, user_dn, atributos)
+
+        return usuario
+
+    def _preparar_dados_criacao(
+            self, usuario: Usuario, senha: str, trocar_senha: bool, container_dn: Optional[str]
+    ) -> tuple[str, dict]:
+        target_container = container_dn or self.dn_padrao
         cn_valor = usuario.nome_completo if usuario.nome_completo else usuario.login
         rdn = f"CN={escape_rdn(cn_valor)}"
         user_dn = f"{rdn},{target_container}"
@@ -105,6 +113,9 @@ class UsuarioLdapRepository(UsuarioRepository):
         if trocar_senha:
             atributos["pwdLastSet"] = 0
 
+        return user_dn, atributos
+
+    def _executar_criacao_no_ad(self, login: str, user_dn: str, atributos: dict) -> None:
         with self.ldap_client.get_conn() as conn:
             try:
                 sucesso = conn.add(
@@ -115,15 +126,81 @@ class UsuarioLdapRepository(UsuarioRepository):
 
                 if not sucesso:
                     resultado = conn.result
-                    # Código 68 no LDAP indica entryAlreadyExists
-                    print(resultado)
                     if resultado.get("result") == 68 or resultado.get("description") == "entryAlreadyExists":
-                        raise UsuarioJaExisteError(f"Usuário com login '{usuario.login}' já existe no AD.")
+                        raise UsuarioJaExisteError(f"Usuário com login '{login}' já existe no AD.")
                     raise InfraError(
                         f"Falha ao criar usuário no AD: {resultado.get('description')} - {resultado.get('message')}"
                     )
 
             except LDAPEntryAlreadyExistsResult as exc:
-                raise UsuarioJaExisteError(f"Usuário com login '{usuario.login}' já existe no AD.") from exc
+                raise UsuarioJaExisteError(f"Usuário com login '{login}' já existe no AD.") from exc
 
-        return usuario
+    def reativar_usuario(
+            self,
+            login: str,
+            senha: Optional[str] = None,
+            trocar_senha: bool = False,
+            container_dn: Optional[str] = None,
+    ) -> Usuario:
+        with self.ldap_client.get_conn() as conn:
+            try:
+                dn_atual, uac_atual = self._obter_dados_iniciais(conn, login)
+
+                if container_dn:
+                    dn_atual = self._mover_usuario(conn, dn_atual, container_dn)
+
+                self._aplicar_reativacao_e_senha(conn, dn_atual, uac_atual, senha, trocar_senha)
+
+            except LDAPException as exc:
+                raise InfraError(f"Erro de comunicação com o AD ao reativar usuário: {exc}") from exc
+
+        return self.buscar_por_login(login)
+
+    def _obter_dados_iniciais(self, conn, login: str) -> tuple[str, int]:
+        conn.search(
+            search_base=self.base_dn,
+            search_filter=f"(sAMAccountName={login})",
+            attributes=["userAccountControl"]
+        )
+        if not conn.entries:
+            raise UsuarioNaoEncontradoError(f"Usuário com login '{login}' não encontrado no AD.")
+
+        entry = conn.entries[0]
+        dn = entry.entry_dn
+        uac = int(entry.userAccountControl.value) if "userAccountControl" in entry else self.HEX_CONTA_NORMAL
+
+        return dn, uac
+
+    def _mover_usuario(self, conn, dn_atual: str, container_dn: str) -> str:
+        rdn = dn_atual.split(",")[0]
+        sucesso_movimento = conn.modify_dn(
+            dn=dn_atual,
+            relative_dn=rdn,
+            new_superior=container_dn
+        )
+        if not sucesso_movimento:
+            resultado = conn.result
+            raise InfraError(
+                f"Falha ao mover usuário no AD: {resultado.get('description')} - {resultado.get('message')}"
+            )
+        return f"{rdn},{container_dn}"
+
+    def _aplicar_reativacao_e_senha(self, conn, dn_atual: str, uac_atual: int, senha: Optional[str], trocar_senha: bool) -> None:
+        uac_novo = uac_atual & ~self.HEX_CONTA_INATIVA
+
+        changes = {
+            "userAccountControl": [(MODIFY_REPLACE, [uac_novo])]
+        }
+
+        if senha:
+            senha_codificada = f'"{senha}"'.encode("utf-16le")
+            changes["unicodePwd"] = [(MODIFY_REPLACE, [senha_codificada])]
+            if trocar_senha:
+                changes["pwdLastSet"] = [(MODIFY_REPLACE, [0])]
+
+        sucesso = conn.modify(dn=dn_atual, changes=changes)
+        if not sucesso:
+            resultado = conn.result
+            raise InfraError(
+                f"Falha ao reativar usuário no AD: {resultado.get('description')} - {resultado.get('message')}"
+            )

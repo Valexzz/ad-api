@@ -214,3 +214,89 @@ def test_deve_repassar_parametro_opcional_padrao_de_dn_e_forcar_senha_ao_nao_ser
 
         assert repo.ultimo_container_dn == "OU=Usuarios,DC=empresa,DC=local"
         assert repo.ultimo_forcar_troca_senha is False
+
+# ==============================================================================
+# Testes: Reativar Usuário
+# ==============================================================================
+
+def test_deve_reativar_usuario_com_sucesso():
+    usuario_inativo = Usuario(
+        login="carlos.inativo",
+        primeiro_nome="Carlos",
+        sobrenome="Inativo",
+        status=StatusUsuario.INATIVO,
+    )
+    repo = FakeUsuarioRepository(usuarios=[usuario_inativo])
+    politica = PoliticaSenha(
+        tamanho_minimo=4, exigir_minuscula=False, exigir_maiuscula=False, exigir_numero=False, exigir_caractere_especial=False
+    )
+    service = UsuarioService(usuario_repository=repo, politica_senha=politica)
+
+    resultado = service.reativar_usuario(
+        login="carlos.inativo",
+        senha="NewPassword@123",
+        trocar_senha=True,
+        container_dn="OU=Ativos,DC=empresa,DC=local"
+    )
+
+    assert repo.ultimo_login_reativado == "carlos.inativo"
+    assert repo.ultima_senha_reativacao == "NewPassword@123"
+    assert repo.ultimo_container_reativacao == "OU=Ativos,DC=empresa,DC=local"
+
+    # Valida o retorno
+    assert resultado.login == "carlos.inativo"
+    assert resultado.status == StatusUsuario.ATIVO
+
+
+def test_deve_lancar_excecao_ao_tentar_reativar_usuario_inexistente():
+    repo = FakeUsuarioRepository(usuarios=[])
+    service = UsuarioService(usuario_repository=repo)
+
+    with pytest.raises(UsuarioNaoEncontradoError) as exc_info:
+        service.reativar_usuario(login="usuario.fantasma", senha="NewPassword@123")
+
+    assert "Usuário com login usuario.fantasma não encontrado" in str(exc_info.value)
+
+
+def test_deve_lancar_excecao_ao_reativar_usuario_com_senha_invalida():
+    usuario_inativo = Usuario(
+        login="carlos.inativo",
+        primeiro_nome="Carlos",
+        sobrenome="Inativo",
+        status=StatusUsuario.INATIVO,
+    )
+    repo = FakeUsuarioRepository(usuarios=[usuario_inativo])
+    politica = PoliticaSenha(tamanho_minimo=8, exigir_numero=True) # Exige tamanho 8 e número
+    service = UsuarioService(usuario_repository=repo, politica_senha=politica)
+
+    # Senha inválida perante a política configurada
+    senha_fraca = "abc"
+
+    with pytest.raises(SenhaInvalidaError) as exc_info:
+        service.reativar_usuario(login="carlos.inativo", senha=senha_fraca)
+
+    assert "ter no mínimo 8 caracteres" in str(exc_info.value)
+    # Garante que o repositório nem foi acionado para salvar/reativar
+    assert repo.ultimo_login_reativado is None
+
+
+def test_deve_reativar_usuario_sem_informar_senha_nova():
+    usuario_inativo = Usuario(
+        login="carlos.inativo",
+        primeiro_nome="Carlos",
+        sobrenome="Inativo",
+        status=StatusUsuario.INATIVO,
+    )
+    repo = FakeUsuarioRepository(usuarios=[usuario_inativo])
+    service = UsuarioService(usuario_repository=repo)
+
+    # Reativa sem passar o parâmetro de senha
+    resultado = service.reativar_usuario(
+        login="carlos.inativo",
+        container_dn="OU=Ativos,DC=empresa,DC=local"
+    )
+
+    assert repo.ultimo_login_reativado == "carlos.inativo"
+    assert repo.ultima_senha_reativacao is None
+    assert repo.ultimo_container_reativacao == "OU=Ativos,DC=empresa,DC=local"
+    assert resultado.status == StatusUsuario.ATIVO

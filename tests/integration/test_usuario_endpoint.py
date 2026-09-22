@@ -6,7 +6,7 @@ from ad_api.api.dependencies import get_usuario_service
 from ad_api.config import settings
 from ad_api.main import app
 from ad_api.services.usuario_service import UsuarioService
-from tests.conftest import LOGIN_INEXISTENTE, LOGIN_USUARIO_ATIVO
+from tests.conftest import LOGIN_INEXISTENTE, LOGIN_USUARIO_ATIVO, LOGIN_USUARIO_INATIVO_INTEGRACAO
 
 
 # ==============================================================================
@@ -141,4 +141,51 @@ def test_criar_usuario_com_senha_fora_da_politica_deve_retornar_status_400(clien
     dados = response.json()
     assert dados["codigo"] == "SENHA_INVALIDA"
     assert "mensagem" in dados
+    assert "A senha não atende aos requisitos" in dados["mensagem"]
+
+# ==============================================================================
+# Testes de Integração: Reativação de Usuário (PUT /usuarios/{login})
+# ==============================================================================
+
+def test_reativar_usuario_deve_retornar_status_200_e_usuario_atualizado(client_com_ad):
+    payload_reativacao = {
+        "senha": "NewPassword@123",
+        "trocar_senha": False,
+        "container_dn": "CN=Users,DC=empresa,DC=local"
+    }
+
+    response = client_com_ad.put(f"/usuarios/{LOGIN_USUARIO_INATIVO_INTEGRACAO}", json=payload_reativacao)
+
+    assert response.status_code == 200
+    dados = response.json()
+    assert dados["login"] == LOGIN_USUARIO_INATIVO_INTEGRACAO
+    assert dados["status"] == "Ativo"
+
+
+def test_reativar_usuario_inexistente_deve_retornar_status_404(client_com_ad):
+    payload = {
+        "senha": "Password@123",
+        "trocar_senha": False
+    }
+
+    response = client_com_ad.put(f"/usuarios/{LOGIN_INEXISTENTE}", json=payload)
+
+    assert response.status_code == 404
+    dados = response.json()
+    assert dados["codigo"] == "USUARIO_NAO_ENCONTRADO"
+    assert "mensagem" in dados
+
+
+def test_reativar_usuario_com_senha_fora_da_politica_deve_retornar_status_400(client_com_ad):
+
+    payload = {
+        "senha": "abc", # Senha fraca que viola a política
+        "trocar_senha": False
+    }
+
+    response = client_com_ad.put(f"/usuarios/{LOGIN_USUARIO_INATIVO_INTEGRACAO}", json=payload)
+
+    assert response.status_code == 400
+    dados = response.json()
+    assert dados["codigo"] == "SENHA_INVALIDA"
     assert "A senha não atende aos requisitos" in dados["mensagem"]
