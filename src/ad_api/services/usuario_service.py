@@ -60,3 +60,21 @@ class UsuarioService:
             trocar_senha=trocar_senha,
             container_dn=container_dn
         )
+
+    def redefinir_senha(
+            self,
+            login: str,
+            senha: str,
+            trocar_senha: bool = False,
+    ) -> Usuario:
+        usuario = self.repository.buscar_por_login(login)
+        if not usuario:
+            raise UsuarioNaoEncontradoError(f"Usuário com login '{login}' não encontrado.")
+
+        self.politica_senha.validar(senha)
+
+        return self.repository.redefinir_senha(
+            login=login,
+            senha=senha,
+            trocar_senha=trocar_senha,
+        )

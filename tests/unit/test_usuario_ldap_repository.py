@@ -1,10 +1,12 @@
+from datetime import datetime, timezone, timedelta
+
 import pytest
 from ldap3 import MODIFY_REPLACE
 
 from ad_api.adapters.usuario_ldap_repository import UsuarioLdapRepository
-from ad_api.domain.model import StatusUsuario, Usuario
+from ad_api.domain.model import StatusUsuario, Usuario, StatusSenha
 from ad_api.errors import UsuarioJaExisteError
-from ad_api.utils import obter_datetime_ad_nunca
+from ad_api.utils import obter_datetime_ad_nunca, datetime_para_ad_filetime
 from tests.conftest import (
     LOGIN_INEXISTENTE,
     LOGIN_SEM_MATRICULA,
@@ -100,6 +102,83 @@ def test_deve_retornar_usuario_sem_segundo_nome_ao_buscar_por_login(fake_ldap_cl
     assert usuario.matricula == MATRICULA_SEM_SEGUNDO_NOME
     assert usuario.nome_completo == f"{PRIMEIRO_NOME_SEM_SEGUNDO_NOME}"
 
+def test_deve_retornar_status_senha_para_redefinir_quando_pwdlastset_for_zero(fake_ldap_client):
+    base_dn = "DC=fake,DC=local"
+    # Adiciona um usuário com pwdLastSet igual a 0 (data base 1601)
+    with fake_ldap_client.get_conn() as conn:
+        conn.strategy.add_entry(
+            f"CN=usuario.redefinir,OU=Users,{base_dn}",
+            {
+                "objectCategory": "person",
+                "objectClass": ["top", "person", "organizationalPerson", "user"],
+                "sAMAccountName": "usuario.redefinir",
+                "givenName": "User",
+                "sn": "Redefinir",
+                "userAccountControl": 512,
+                "pwdLastSet": 0,  # Força zero para indicar necessidade de troca
+            },
+        )
+
+    repo = UsuarioLdapRepository(ldap_client=fake_ldap_client, base_dn=base_dn)
+    usuario = repo.buscar_por_login("usuario.redefinir")
+
+    assert usuario is not None
+    assert usuario.status_senha == StatusSenha.PARA_REDEFINIR
+
+
+def test_deve_retornar_status_senha_expirada_quando_passar_dos_dias_limite(fake_ldap_client):
+    base_dn = "DC=fake,DC=local"
+
+    # Simula um pwdLastSet antigo (ex: 120 dias atrás)
+    data_antiga = datetime_para_ad_filetime(datetime.now(timezone.utc) - timedelta(days=120))
+
+    with fake_ldap_client.get_conn() as conn:
+        conn.strategy.add_entry(
+            f"CN=usuario.expirado,OU=Users,{base_dn}",
+            {
+                "objectCategory": "person",
+                "objectClass": ["top", "person", "organizationalPerson", "user"],
+                "sAMAccountName": "usuario.expirado",
+                "givenName": "User",
+                "sn": "Expirado",
+                "userAccountControl": 512,
+                "pwdLastSet": data_antiga,
+            },
+        )
+
+    # Configura o repositório para expirar com 90 dias (padrão)
+    repo = UsuarioLdapRepository(ldap_client=fake_ldap_client, base_dn=base_dn, dias_expiracao_senha_ad=90)
+    usuario = repo.buscar_por_login("usuario.expirado")
+
+    assert usuario is not None
+    assert usuario.status_senha == StatusSenha.EXPIRADA
+
+
+def test_deve_retornar_status_senha_ativa_quando_pwdlastset_for_recente(fake_ldap_client):
+    base_dn = "DC=fake,DC=local"
+
+    # Simula um pwdLastSet recente (ex: 5 dias atrás)
+    data_recente = datetime_para_ad_filetime(datetime.now(timezone.utc) - timedelta(days=5))
+
+    with fake_ldap_client.get_conn() as conn:
+        conn.strategy.add_entry(
+            f"CN=usuario.ativo.senha,OU=Users,{base_dn}",
+            {
+                "objectCategory": "person",
+                "objectClass": ["top", "person", "organizationalPerson", "user"],
+                "sAMAccountName": "usuario.ativo.senha",
+                "givenName": "User",
+                "sn": "AtivoSenha",
+                "userAccountControl": 512,
+                "pwdLastSet": data_recente,
+            },
+        )
+
+    repo = UsuarioLdapRepository(ldap_client=fake_ldap_client, base_dn=base_dn, dias_expiracao_senha_ad=90)
+    usuario = repo.buscar_por_login("usuario.ativo.senha")
+
+    assert usuario is not None
+    assert usuario.status_senha == StatusSenha.ATIVA
 
 # ==============================================================================
 # Testes: criar_usuario
@@ -357,3 +436,59 @@ def test_deve_definir_pwdlastset_zero_na_reativacao_quando_forcar_troca_senha_fo
         )
         assert len(conn.entries) == 1
         assert conn.entries[0]["pwdLastSet"].value == obter_datetime_ad_nunca()
+
+# ==============================================================================
+# Testes: redefinir_senha (Repository)
+# ==============================================================================
+
+def test_deve_redefinir_senha_com_sucesso_no_ad(fake_ldap_client):
+    base_dn = "DC=fake,DC=local"
+    repo = UsuarioLdapRepository(ldap_client=fake_ldap_client, base_dn=base_dn, dn_padrao=f"OU=Users,{base_dn}")
+
+    repo.redefinir_senha(
+        login=LOGIN_USUARIO_ATIVO,
+        senha="SuperNewPassword@123",
+        trocar_senha=False,
+    )
+
+    with fake_ldap_client.get_conn() as conn:
+        conn.search(
+            search_base=base_dn,
+            search_filter=f"(sAMAccountName={LOGIN_USUARIO_ATIVO})",
+            attributes=["unicodePwd"],
+        )
+        assert len(conn.entries) == 1
+        entry = conn.entries[0]
+        assert entry["unicodePwd"].raw_values == [f'"SuperNewPassword@123"'.encode("utf-16le")]
+
+
+def test_deve_definir_pwdlastset_zero_ao_redefinir_senha_com_trocar_senha_true(fake_ldap_client):
+    base_dn = "DC=fake,DC=local"
+    repo = UsuarioLdapRepository(ldap_client=fake_ldap_client, base_dn=base_dn, dn_padrao=f"OU=Users,{base_dn}")
+
+    repo.redefinir_senha(
+        login=LOGIN_USUARIO_ATIVO,
+        senha="SuperNewPassword@123",
+        trocar_senha=True,
+    )
+
+    with fake_ldap_client.get_conn() as conn:
+        conn.search(
+            search_base=base_dn,
+            search_filter=f"(sAMAccountName={LOGIN_USUARIO_ATIVO})",
+            attributes=["pwdLastSet"],
+        )
+        assert len(conn.entries) == 1
+        assert conn.entries[0]["pwdLastSet"].value == obter_datetime_ad_nunca()
+
+
+def test_deve_lancar_excecao_ao_tentar_redefinir_senha_de_usuario_inexistente_no_ad(fake_ldap_client):
+    base_dn = "DC=fake,DC=local"
+    repo = UsuarioLdapRepository(ldap_client=fake_ldap_client, base_dn=base_dn, dn_padrao=f"OU=Users,{base_dn}")
+
+    from ad_api.errors import UsuarioNaoEncontradoError
+
+    with pytest.raises(UsuarioNaoEncontradoError) as exc_info:
+        repo.redefinir_senha(login=LOGIN_INEXISTENTE, senha="Password@123")
+
+    assert f"Usuário com login '{LOGIN_INEXISTENTE}' não encontrado no AD." in str(exc_info.value)

@@ -189,3 +189,48 @@ def test_reativar_usuario_com_senha_fora_da_politica_deve_retornar_status_400(cl
     dados = response.json()
     assert dados["codigo"] == "SENHA_INVALIDA"
     assert "A senha não atende aos requisitos" in dados["mensagem"]
+
+# ==============================================================================
+# Testes de Integração: Redefinição de Senha (PATCH /usuarios/{login}/redefinir-senha)
+# ==============================================================================
+
+def test_redefinir_senha_deve_retornar_status_200_e_usuario(client_com_ad):
+    payload = {
+        "senha": "NewSecurePassword@123",
+        "trocar_senha": False
+    }
+
+    response = client_com_ad.patch(f"/usuarios/{LOGIN_USUARIO_ATIVO}/redefinir-senha", json=payload)
+
+    assert response.status_code == 200
+    dados = response.json()
+    assert dados["login"] == LOGIN_USUARIO_ATIVO
+    assert dados["status"] == "Ativo"
+
+
+def test_redefinir_senha_usuario_inexistente_deve_retornar_status_404(client_com_ad):
+    payload = {
+        "senha": "NewSecurePassword@123",
+        "trocar_senha": False
+    }
+
+    response = client_com_ad.patch(f"/usuarios/{LOGIN_INEXISTENTE}/redefinir-senha", json=payload)
+
+    assert response.status_code == 404
+    dados = response.json()
+    assert dados["codigo"] == "USUARIO_NAO_ENCONTRADO"
+    assert "mensagem" in dados
+
+
+def test_redefinir_senha_com_senha_fraca_deve_retornar_status_400(client_com_ad):
+    payload = {
+        "senha": "abc",
+        "trocar_senha": False
+    }
+
+    response = client_com_ad.patch(f"/usuarios/{LOGIN_USUARIO_ATIVO}/redefinir-senha", json=payload)
+
+    assert response.status_code == 400
+    dados = response.json()
+    assert dados["codigo"] == "SENHA_INVALIDA"
+    assert "A senha não atende aos requisitos" in dados["mensagem"]

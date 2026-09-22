@@ -18,3 +18,10 @@ def obter_valor_atributo_ad(registro: Any, nome_atributo: str, valor_padrao: Opt
 
 def obter_datetime_ad_nunca() -> datetime:
     return datetime(1601, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+
+def datetime_para_ad_filetime(dt: datetime) -> int:
+    """Converte um datetime do Python para o formato inteiro FILETIME do Active Directory."""
+    epoch_windows = datetime(1601, 1, 1, tzinfo=timezone.utc)
+    # Diferença em segundos multiplicada por 10 milhões (intervalos de 100 nanossegundos)
+    return int((dt - epoch_windows).total_seconds() * 10000000)

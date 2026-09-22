@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from starlette import status
 
 from ad_api.api.dependencies import get_usuario_service
-from ad_api.api.schemas import UsuarioResponse, UsuarioRequest, UsuarioReativarRequest
+from ad_api.api.schemas import UsuarioResponse, UsuarioRequest, UsuarioReativarRequest, UsuarioRedefinirSenhaRequest
 from ad_api.domain.model import Usuario
 from ad_api.errors import DomainError
 from ad_api.services.usuario_service import UsuarioService
@@ -53,3 +53,17 @@ def reativar_usuario(
     )
 
     return usuario_reativado
+
+@router.patch("/{login}/redefinir-senha", status_code=status.HTTP_200_OK, response_model=UsuarioResponse)
+def redefinir_senha(
+        login: str,
+        payload: UsuarioRedefinirSenhaRequest,
+        service: UsuarioService = Depends(get_usuario_service)
+):
+    usuario_redefinido = service.redefinir_senha(
+        login=login,
+        senha=payload.senha,
+        trocar_senha=payload.trocar_senha,
+    )
+
+    return usuario_redefinido

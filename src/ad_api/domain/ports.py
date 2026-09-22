@@ -46,3 +46,12 @@ class UsuarioRepository(ABC):
         :param container_dn: Opcional. Nova OU/Container de destino para mover o usuário.
         """
         raise NotImplementedError
+
+    @abstractmethod
+    def redefinir_senha(
+            self,
+            login: str,
+            senha: str,
+            trocar_senha: bool = False,
+    ) -> Usuario:
+        raise NotImplementedError

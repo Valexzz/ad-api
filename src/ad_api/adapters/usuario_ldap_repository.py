@@ -1,3 +1,4 @@
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from ldap3 import MODIFY_REPLACE
@@ -7,7 +8,7 @@ from ldap3.utils.dn import escape_rdn
 
 from ad_api.adapters.conn import LdapClient
 from ad_api.config import settings
-from ad_api.domain.model import StatusUsuario, Usuario
+from ad_api.domain.model import StatusUsuario, Usuario, StatusSenha
 from ad_api.domain.ports import UsuarioRepository
 from ad_api.errors import (
     InfraError,
@@ -26,15 +27,17 @@ class UsuarioLdapRepository(UsuarioRepository):
             ldap_client: LdapClient,
             base_dn: Optional[str] = None,
             dn_padrao: Optional[str] = None,
+            dias_expiracao_senha_ad: Optional[int] = None,
     ):
         self.ldap_client = ldap_client
         self.base_dn = base_dn or settings.dn_base_ad
         self.dn_padrao = dn_padrao or getattr(settings, "dn_padrao_ad", self.base_dn)
+        self.dias_expiracao_senha_ad = dias_expiracao_senha_ad or getattr(settings, "dias_expiracao_senha_ad", 90)
 
     def buscar_por_login(self, login: str) -> Optional[Usuario]:
         login_sanitizado = escape_filter_chars(login)
         filtro = f"(&(objectCategory=person)(objectClass=user)(sAMAccountName={login_sanitizado}))"
-        atributos = ["sAMAccountName", "givenName", "sn", "userAccountControl", "employeeID"]
+        atributos = ["sAMAccountName", "givenName", "sn", "userAccountControl", "employeeID", "pwdLastSet"]
 
         with self.ldap_client.get_conn() as conn:
             conn.search(
@@ -60,13 +63,26 @@ class UsuarioLdapRepository(UsuarioRepository):
             if login_ad is None:
                 raise UsuarioSemLoginError("Usuário não possui login no AD")
 
-            return Usuario(
-                login=obter_valor_atributo_ad(registro, "sAMAccountName", login_sanitizado),
-                primeiro_nome=obter_valor_atributo_ad(registro, "givenName", ""),
-                sobrenome=obter_valor_atributo_ad(registro, "sn", ""),
-                status=status_usuario,
-                matricula=obter_valor_atributo_ad(registro, "employeeID", None),
-            )
+            status_senha = StatusSenha.ATIVA
+            pwd_last_set = registro["pwdLastSet"].value if "pwdLastSet" in registro else None
+
+            if pwd_last_set is None or pwd_last_set == 0 or pwd_last_set == datetime(1601, 1, 1, tzinfo=timezone.utc):
+                status_senha = StatusSenha.PARA_REDEFINIR
+            elif isinstance(pwd_last_set, datetime):
+                dias_expiracao = self.dias_expiracao_senha_ad
+                data_expiracao = pwd_last_set + timedelta(days=dias_expiracao)
+                if datetime.now(timezone.utc) > data_expiracao:
+                    status_senha = StatusSenha.EXPIRADA
+
+
+        return Usuario(
+                    login=obter_valor_atributo_ad(registro, "sAMAccountName", login_sanitizado),
+                    primeiro_nome=obter_valor_atributo_ad(registro, "givenName", ""),
+                    sobrenome=obter_valor_atributo_ad(registro, "sn", ""),
+                    status=status_usuario,
+                    status_senha=status_senha,
+                    matricula=obter_valor_atributo_ad(registro, "employeeID", None),
+                )
 
     def criar_usuario(
             self,
@@ -204,3 +220,44 @@ class UsuarioLdapRepository(UsuarioRepository):
             raise InfraError(
                 f"Falha ao reativar usuário no AD: {resultado.get('description')} - {resultado.get('message')}"
             )
+
+    def redefinir_senha(
+            self,
+            login: str,
+            senha: str,
+            trocar_senha: bool = False,
+    ) -> Usuario:
+        with self.ldap_client.get_conn() as conn:
+            try:
+                conn.search(
+                    search_base=self.base_dn,
+                    search_filter=f"(sAMAccountName={login})",
+                    attributes=["sAMAccountName"]
+                )
+
+                if not conn.entries:
+                    raise UsuarioNaoEncontradoError(f"Usuário com login '{login}' não encontrado no AD.")
+
+                dn_atual = conn.entries[0].entry_dn
+
+                senha_codificada = f'"{senha}"'.encode("utf-16le")
+
+                changes = {
+                    "unicodePwd": [(MODIFY_REPLACE, [senha_codificada])]
+                }
+
+                if trocar_senha:
+                    changes["pwdLastSet"] = [(MODIFY_REPLACE, [0])]
+
+                sucesso = conn.modify(dn=dn_atual, changes=changes)
+
+                if not sucesso:
+                    resultado = conn.result
+                    raise InfraError(
+                        f"Falha ao redefinir senha no AD: {resultado.get('description')} - {resultado.get('message')}"
+                    )
+
+            except LDAPException as exc:
+                raise InfraError(f"Erro de comunicação com o AD ao redefinir senha: {exc}") from exc
+
+        return self.buscar_por_login(login)

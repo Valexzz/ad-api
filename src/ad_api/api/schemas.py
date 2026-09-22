@@ -10,6 +10,7 @@ class UsuarioResponse(BaseModel):
     nome_completo: str
     matricula: Optional[str] = None
     status: StatusUsuario
+    status_senha: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -28,3 +29,7 @@ class UsuarioReativarRequest(BaseModel):
     senha: str
     trocar_senha: bool = False
     container_dn: Optional[str] = None
+
+class UsuarioRedefinirSenhaRequest(BaseModel):
+    senha: str
+    trocar_senha: bool = False

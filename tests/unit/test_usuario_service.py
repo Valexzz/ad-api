@@ -300,3 +300,87 @@ def test_deve_reativar_usuario_sem_informar_senha_nova():
     assert repo.ultima_senha_reativacao is None
     assert repo.ultimo_container_reativacao == "OU=Ativos,DC=empresa,DC=local"
     assert resultado.status == StatusUsuario.ATIVO
+
+# ==============================================================================
+# Testes: Redefinir Senha (Service)
+# ==============================================================================
+
+def test_deve_redefinir_senha_com_sucesso():
+    usuario_existente = Usuario(
+        login="carlos.teste",
+        primeiro_nome="Carlos",
+        sobrenome="Teste",
+        status=StatusUsuario.ATIVO,
+    )
+    repo = FakeUsuarioRepository(usuarios=[usuario_existente])
+    politica = PoliticaSenha(
+        tamanho_minimo=4, exigir_minuscula=False, exigir_maiuscula=False, exigir_numero=False, exigir_caractere_especial=False
+    )
+    service = UsuarioService(usuario_repository=repo, politica_senha=politica)
+
+    resultado = service.redefinir_senha(
+        login="carlos.teste",
+        senha="NewPassword@123",
+        trocar_senha=True,
+    )
+
+    assert repo.ultimo_login_redefinicao_senha == "carlos.teste"
+    assert repo.ultima_senha_redefinicao == "NewPassword@123"
+    assert repo.ultimo_forcar_troca_senha_redefinicao is True
+    assert resultado == usuario_existente
+
+
+def test_deve_lancar_excecao_ao_tentar_redefinir_senha_de_usuario_inexistente():
+    repo = FakeUsuarioRepository(usuarios=[])
+    service = UsuarioService(usuario_repository=repo)
+
+    with pytest.raises(UsuarioNaoEncontradoError) as exc_info:
+        service.redefinir_senha(login="fantasma", senha="NewPassword@123")
+
+    assert "Usuário com login 'fantasma' não encontrado" in str(exc_info.value)
+    assert repo.ultimo_login_redefinicao_senha is None
+
+
+def test_deve_lancar_excecao_ao_redefinir_senha_com_senha_invalida():
+    usuario_existente = Usuario(
+        login="carlos.teste",
+        primeiro_nome="Carlos",
+        sobrenome="Teste",
+        status=StatusUsuario.ATIVO,
+    )
+    repo = FakeUsuarioRepository(usuarios=[usuario_existente])
+    politica = PoliticaSenha(tamanho_minimo=8, exigir_numero=True) # Exige tamanho 8 e número
+    service = UsuarioService(usuario_repository=repo, politica_senha=politica)
+
+    senha_fraca = "abc"
+
+    with pytest.raises(SenhaInvalidaError) as exc_info:
+        service.redefinir_senha(login="carlos.teste", senha=senha_fraca)
+
+    assert "ter no mínimo 8 caracteres" in str(exc_info.value)
+    # Garante que o repositório não foi acionado, pois a senha falhou na política
+    assert repo.ultimo_login_redefinicao_senha is None
+
+
+def test_deve_redefinir_senha_com_trocar_senha_false_por_padrao():
+    usuario_existente = Usuario(
+        login="carlos.teste",
+        primeiro_nome="Carlos",
+        sobrenome="Teste",
+        status=StatusUsuario.ATIVO,
+    )
+    repo = FakeUsuarioRepository(usuarios=[usuario_existente])
+    politica = PoliticaSenha(
+        tamanho_minimo=4, exigir_minuscula=False, exigir_maiuscula=False, exigir_numero=False, exigir_caractere_especial=False
+    )
+    service = UsuarioService(usuario_repository=repo, politica_senha=politica)
+
+    service.redefinir_senha(
+        login="carlos.teste",
+        senha="NewPassword@123",
+        # trocar_senha omitido (deve ir False por padrão)
+    )
+
+    assert repo.ultimo_login_redefinicao_senha == "carlos.teste"
+    assert repo.ultima_senha_redefinicao == "NewPassword@123"
+    assert repo.ultimo_forcar_troca_senha_redefinicao is False

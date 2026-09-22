@@ -1,7 +1,5 @@
 # Regras de negócio
 
-RN01 - Caso não informe a senha para cadastro, deverá haver uma senha padrão.
-
 RN02 - O cadastro pode definir para a senha ser alterada no primeiro login ou não.
 
 RN03 - O sistema deve informar se a senha da pessoa expirou.

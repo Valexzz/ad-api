@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     exigir_caractere_especial_senha_ad: bool = True
     chars_especiais_senha_ad: str = r"!@#$%&*"
 
+    dias_expiracao_senha_ad: int = 90
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

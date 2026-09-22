@@ -11,6 +11,7 @@ from ad_api.adapters.usuario_ldap_repository import UsuarioLdapRepository
 from ad_api.api.dependencies import get_usuario_service
 from ad_api.domain.model import Usuario, StatusUsuario
 from ad_api.domain.ports import UsuarioRepository
+from ad_api.errors import UsuarioNaoEncontradoError
 from ad_api.main import app
 from ad_api.services.usuario_service import UsuarioService
 from fastapi.testclient import TestClient
@@ -56,6 +57,7 @@ class FakeLdapClient(LdapClient):
 
 class FakeUsuarioRepository(UsuarioRepository):
     def __init__(self, usuarios: list[Usuario] | None = None):
+
         self._usuarios = {u.login: u for u in (usuarios or [])}
         self.ultimo_usuario_criado = None
         self.ultima_senha = None
@@ -65,6 +67,10 @@ class FakeUsuarioRepository(UsuarioRepository):
         self.ultimo_login_reativado = None
         self.ultima_senha_reativacao = None
         self.ultimo_container_reativacao = None
+
+        self.ultimo_login_redefinicao_senha = None
+        self.ultima_senha_redefinicao = None
+        self.ultimo_forcar_troca_senha_redefinicao = None
 
     def buscar_por_login(self, login: str) -> Optional[Usuario]:
         return self._usuarios.get(login)
@@ -98,6 +104,21 @@ class FakeUsuarioRepository(UsuarioRepository):
         if usuario:
             usuario.status = StatusUsuario.ATIVO
 
+        return usuario
+
+    def redefinir_senha(
+            self,
+            login: str,
+            senha: str,
+            trocar_senha: bool = False,
+    ):
+        self.ultimo_login_redefinicao_senha = login
+        self.ultima_senha_redefinicao = senha
+        self.ultimo_forcar_troca_senha_redefinicao = trocar_senha
+
+        usuario = self._usuarios.get(login)
+        if not usuario:
+            raise UsuarioNaoEncontradoError(f"Usuário com login '{login}' não encontrado.")
         return usuario
 
 

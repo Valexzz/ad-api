@@ -9,6 +9,11 @@ class StatusUsuario(str, Enum):
     ATIVO = "Ativo"
     INATIVO = "Inativo"
 
+class StatusSenha(str, Enum):
+    ATIVA = "Ativa"
+    EXPIRADA = "Expirada"
+    PARA_REDEFINIR = "Para Redefinir"
+    NAO_INFORMADO = "Não Informado"
 
 @dataclass
 class Usuario:
@@ -16,6 +21,7 @@ class Usuario:
     primeiro_nome: str
     sobrenome: str
     status: StatusUsuario
+    status_senha: StatusSenha = StatusSenha.NAO_INFORMADO
     matricula: Optional[str] = None
 
     @property
