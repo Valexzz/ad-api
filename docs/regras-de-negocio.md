@@ -6,7 +6,7 @@ RN02 - O cadastro pode definir para a senha ser alterada no primeiro login ou n�
 
 RN03 - O sistema deve informar se a senha da pessoa expirou.
 
-RN04 - O sistema deve informar se a pessoa está sem cadastro, inativa ou cadastrada.
+RN04 - O sistema deve informar se a pessoa está sem cadastro (retornando 404), inativa ou cadastrada.
 
 RN05 - O sistema deve permitir a redefinição de senha sem necessidade de informar a senha atual.
 

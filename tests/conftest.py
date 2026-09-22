@@ -1,5 +1,7 @@
 import time
 from contextlib import contextmanager
+from typing import Optional
+
 import pytest
 from ldap3 import Server, Connection, MOCK_SYNC, OFFLINE_AD_2012_R2
 from testcontainers.core.container import DockerContainer
@@ -7,6 +9,8 @@ from testcontainers.core.container import DockerContainer
 from ad_api.adapters.conn import LdapClient
 from ad_api.adapters.usuario_ldap_repository import UsuarioLdapRepository
 from ad_api.api.dependencies import get_usuario_service
+from ad_api.domain.model import Usuario
+from ad_api.domain.ports import UsuarioRepository
 from ad_api.main import app
 from ad_api.services.usuario_service import UsuarioService
 from fastapi.testclient import TestClient
@@ -48,6 +52,31 @@ class FakeLdapClient(LdapClient):
         yield self._conn
 
 
+class FakeUsuarioRepository(UsuarioRepository):
+    def __init__(self, usuarios: list[Usuario] | None = None):
+        self._usuarios = {u.login: u for u in (usuarios or [])}
+        self.ultimo_usuario_criado = None
+        self.ultima_senha = None
+        self.ultimo_forcar_troca_senha = None
+        self.ultimo_container_dn = None
+
+    def buscar_por_login(self, login: str) -> Optional[Usuario]:
+        return self._usuarios.get(login)
+
+    def criar_usuario(
+            self,
+            usuario: Usuario,
+            senha: str,
+            trocar_senha: bool = False,
+            container_dn: Optional[str] = None,
+    ):
+        self.ultimo_usuario_criado = usuario
+        self.ultima_senha = senha
+        self.ultimo_forcar_troca_senha = trocar_senha
+        self.ultimo_container_dn = container_dn
+        self._usuarios[usuario.login] = usuario
+        return usuario
+
 @pytest.fixture
 def ldap_mock_conn():
     server = Server("server_ad_fake", get_info=OFFLINE_AD_2012_R2)
@@ -60,9 +89,10 @@ def ldap_mock_conn():
     )
     conn.bind()
 
-    # 1. Usuário Completo Ativo
+    cn_usuario_ativo = f"{PRIMEIRO_NOME_USUARIO_ATIVO} {SEGUNDO_NOME_USUARIO_ATIVO}"
+
     conn.strategy.add_entry(
-        f"CN={LOGIN_USUARIO_ATIVO},OU=Users,DC=fake,DC=local",
+        f"CN={cn_usuario_ativo},OU=Users,DC=fake,DC=local",
         {
             "objectCategory": "person",
             "objectClass": ["top", "person", "organizationalPerson", "user"],
@@ -73,7 +103,6 @@ def ldap_mock_conn():
             "employeeID": MATRICULA_USUARIO_ATIVO,
         },
     )
-
     # 2. Usuário Inativo
     conn.strategy.add_entry(
         f"CN={LOGIN_USUARIO_INATIVO},OU=Users,DC=fake,DC=local",
@@ -149,7 +178,7 @@ def samba_ad_container():
 
     with container:
         print("Iniciando o container do Samba AD...")
-        time.sleep(10)
+        time.sleep(15)
 
         container.exec("samba-tool user create svc_api MinhaSenhaForte123")
         container.exec(
@@ -177,7 +206,7 @@ def client_com_ad(samba_ad_container):
     real_client = LdapClient(
         server=samba_ad_container["host"],
         port=samba_ad_container["port"],
-        user=samba_ad_container["bind_user"],
+        user=f"Administrator@{samba_ad_container['domain']}",
         password=samba_ad_container["bind_password"],
         use_ssl=True,
     )

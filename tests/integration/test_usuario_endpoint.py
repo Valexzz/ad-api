@@ -9,6 +9,10 @@ from ad_api.services.usuario_service import UsuarioService
 from tests.conftest import LOGIN_INEXISTENTE, LOGIN_USUARIO_ATIVO
 
 
+# ==============================================================================
+# Testes de Integração: Leitura / Consulta de Usuário (GET /usuarios/{login})
+# ==============================================================================
+
 def test_buscar_por_login_deve_retornar_status_200_e_usuario(client_com_ad):
     response = client_com_ad.get(f"/usuarios/{LOGIN_USUARIO_ATIVO}")
 
@@ -52,8 +56,89 @@ def test_buscar_sem_conexao_deve_retornar_status_502():
     assert response.status_code == 502
     dados = response.json()
     assert dados["codigo"] == "ERRO_COMUNICACAO_AD"
+    assert "mensagem" in dados
 
     if getattr(settings, 'debug', False):
-        assert "mensagem" in dados
+        assert "detalhe" in dados
     else:
-        assert "mensagem" not in dados
+        assert "detalhe" not in dados
+
+
+# ==============================================================================
+# Testes de Integração: Criação de Usuário (POST /usuarios)
+# ==============================================================================
+
+def test_criar_usuario_deve_retornar_status_201_e_dados_do_usuario(client_com_ad):
+    payload = {
+        "login": "novo.usuario.teste",
+        "senha": "Password@123",
+        "trocar_senha": False,
+        "status": "Ativo",
+        "primeiro_nome": "Novo",
+        "sobrenome": "Usuario Teste",
+        "matricula": "98765",
+        "container_dn": "CN=Users,DC=empresa,DC=local"
+    }
+
+    response = client_com_ad.post("/usuarios", json=payload)
+
+    assert response.status_code == 201
+    dados = response.json()
+    assert dados["login"] == payload["login"]
+    assert dados["nome_completo"] == "Novo Usuario Teste"
+    assert dados["status"] == "Ativo"
+    assert dados["matricula"] == "98765"
+
+
+def test_criar_usuario_com_dados_invalidos_deve_retornar_status_400(client_com_ad):
+    # Violando a regra de domínio: sem informar nem nome_completo nem primeiro_nome
+    payload = {
+        "login": "usuario.invalido",
+        "senha": "Password@123",
+        "status": "Ativo",
+        "matricula": "11111"
+    }
+
+    response = client_com_ad.post("/usuarios", json=payload)
+
+    assert response.status_code == 400
+    dados = response.json()
+    assert dados["codigo"] == "ERRO_REGRA_DE_NEGOCIO"
+    assert "mensagem" in dados
+
+
+def test_criar_usuario_duplicado_deve_retornar_status_409(client_com_ad):
+    # LOGIN_USUARIO_ATIVO ("victor") já é criado estaticamente na fixture do Samba AD
+    payload = {
+        "login": LOGIN_USUARIO_ATIVO,
+        "senha": "Password@123",
+        "status": "Ativo",
+        "primeiro_nome": "Victor",
+        "sobrenome": "Duplicado"
+    }
+
+    response = client_com_ad.post("/usuarios", json=payload)
+
+    assert response.status_code == 409
+    dados = response.json()
+    assert dados["codigo"] == "USUARIO_JA_EXISTE"
+    assert "mensagem" in dados
+
+
+def test_criar_usuario_com_senha_fora_da_politica_deve_retornar_status_400(client_com_ad):
+    # Senha que viola várias regras: curta, sem maiúscula, sem número e sem caractere especial
+    payload = {
+        "login": "senha.invalida.politica",
+        "senha": "abc",
+        "status": "Ativo",
+        "primeiro_nome": "Senha",
+        "sobrenome": "Invalida"
+    }
+
+    response = client_com_ad.post("/usuarios", json=payload)
+
+    assert response.status_code == 400
+    dados = response.json()
+    assert dados["codigo"] == "SENHA_INVALIDA"
+    assert "mensagem" in dados
+    assert "A senha não atende aos requisitos" in dados["mensagem"]

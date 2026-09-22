@@ -19,6 +19,24 @@ def usuario_nao_encontrado_handler(request: Request, exc: Exception) -> JSONResp
         },
     )
 
+def senha_invalida_handler(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content={
+            "codigo": "SENHA_INVALIDA",
+            "mensagem": str(exc)
+        }
+    )
+
+def usuario_ja_existe_handler(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={
+            "codigo": "USUARIO_JA_EXISTE",
+            "mensagem": str(exc)
+        }
+    )
+
 
 def domain_error_handler(request: Request, exc: Exception) -> JSONResponse:
     """Captura qualquer outro erro de regra de negócio/domínio (regra violada)."""
@@ -44,3 +62,4 @@ def infra_error_handler(request: Request, exc: Exception) -> JSONResponse:
         status_code=502,
         content=resposta,
     )
+

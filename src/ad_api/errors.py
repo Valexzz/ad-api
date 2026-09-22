@@ -9,3 +9,9 @@ class InfraError(Exception):
 
 class UsuarioSemLoginError(InfraError):
     pass
+
+class SenhaInvalidaError(DomainError):
+    pass
+
+class UsuarioJaExisteError(DomainError):
+    pass
