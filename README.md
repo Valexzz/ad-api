@@ -62,7 +62,7 @@ LOG_LEVEL=INFO
 Descrição das Variáveis de Ambiente
 
 | Variável                             | Descrição                                                                                                                                                                       |
-| :----------------------------------- |:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|:-------------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `SERVIDOR_AD`                        | Endereço IP ou hostname do servidor Active Directory.                                                                                                                           |
 | `DOMINIO_AD`                         | Nome do domínio DNS do AD (ex: `empresa.local`).                                                                                                                                |
 | `DOMAIN_AD`                          | Nome NetBIOS do domínio (ex: `EMPRESA`).                                                                                                                                        |
@@ -71,7 +71,7 @@ Descrição das Variáveis de Ambiente
 | `DN_BASE_AD`                         | Distinguished Name raiz da árvore do diretório (ex: `DC=empresa,DC=local`).                                                                                                     |
 | `DN_PADRAO_AD`                       | Unidade Organizacional (OU) padrão onde os novos usuários serão criados.                                                                                                        |
 | `TIMEOUT_LDAP`                       | Tempo limite (em segundos) para interromper requisições travadas ao AD.                                                                                                         |
-| `CHAVE_API`                          | Chave secreta exigida no cabeçalho (`x-api-key`) para consumir os endpoints.                                                                                                    |
+| `CHAVE_API_HASH`                     | Hash da Chave secreta exigida no cabeçalho (`x-api-key`) para consumir os endpoints.                                                                                            |
 | `TAMANHO_MINIMO_SENHA_AD`            | Número mínimo de caracteres exigidos na criação/redefinição de senha.                                                                                                           |
 | `EXIGIR_MINUSCULA_SENHA_AD`          | Define se a senha obrigatoriamente precisa conter letras minúsculas (`true`/`false`).                                                                                           |
 | `EXIGIR_MAIUSCULA_SENHA_AD`          | Define se a senha obrigatoriamente precisa conter letras maiúsculas (`true`/`false`).                                                                                           |

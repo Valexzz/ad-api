@@ -1,4 +1,6 @@
-FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS builder
+FROM python:3.12-slim-bookworm AS builder
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
@@ -21,7 +23,7 @@ RUN uv sync --frozen --no-dev
 # ==========================================
 # Imagem final de execução
 # ==========================================
-FROM python:3.14-slim-bookworm
+FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 

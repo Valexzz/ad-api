@@ -28,6 +28,7 @@ class UsuarioRequest(BaseModel):
 class UsuarioReativarRequest(BaseModel):
     senha: str
     trocar_senha: bool = False
+    mover_para_container_padrao: bool = False
     container_dn: Optional[str] = None
 
 class UsuarioRedefinirSenhaRequest(BaseModel):

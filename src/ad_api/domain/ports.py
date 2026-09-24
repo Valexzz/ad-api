@@ -34,6 +34,7 @@ class UsuarioRepository(ABC):
             login: str,
             senha: Optional[str] = None,
             trocar_senha: bool = False,
+            mover_para_container_padrao: bool = False,
             container_dn: Optional[str] = None,
     ) -> Usuario:
         """
@@ -43,6 +44,7 @@ class UsuarioRepository(ABC):
         :param login: Login (sAMAccountName) do usuário a ser reativado.
         :param senha: Opcional. Se informada, redefine a senha durante a reativação.
         :param trocar_senha: Se True e houver senha, seta pwdLastSet = 0 (RN02).
+        :param mover_para_container_padrao: Se True, moverá para o container padrão definido em settings. container_dn toma precedência sobre este parâmetro.
         :param container_dn: Opcional. Nova OU/Container de destino para mover o usuário.
         """
         raise NotImplementedError

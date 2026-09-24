@@ -96,6 +96,7 @@ class FakeUsuarioRepository(UsuarioRepository):
             login: str,
             senha: Optional[str] = None,
             trocar_senha: bool = False,
+            mover_para_container_padrao: bool = False,
             container_dn: Optional[str] = None,
     ):
         self.ultimo_login_reativado = login
