@@ -4,17 +4,34 @@ ads:
     dominio: "ad1.local"
     dominio_netbios: "AD1"
     usuario_service_account: "svc_prefeitura@ad1.local"
-    env_senha_service_account: "AD_1_SENHA" # Mesmo nome da variável .env
-    env_chave_api_hash: "AD_1_CHAVE_API" # Mesmo nome da variável .env
+    env_senha_service_account: "AD_1_SENHA"
+    env_chave_api_hash: "AD_1_CHAVE_API"
     dn_base: "DC=ad1,DC=local"
     dn_padrao: "OU=Usuarios,DC=ad1,DC=local"
+    timeout_ldap: 5
+    politica_senha:
+      tamanho_minimo: 8
+      exigir_minuscula: true
+      exigir_maiuscula: true
+      exigir_numero: true
+      exigir_caractere_especial: true
+      chars_especiais: "!@#$%&*"
+      dias_expiracao: 90
 
   ad2:
     servidor: "ldap.ad2.local"
     dominio: "ad2.local"
     dominio_netbios: "AD2"
     usuario_service_account: "svc_prefeitura@ad2.local"
-    env_senha_service_account: "AD_2_SENHA" # Mesmo nome da variável .env
-    env_chave_api_hash: "AD_2_CHAVE_API" # Mesmo nome da variável .env
+    env_senha_service_account: "AD_2_SENHA"
+    env_chave_api_hash: "AD_2_CHAVE_API"
     dn_base: "DC=ad2,DC=local"
     dn_padrao: "OU=Usuarios,DC=ad2,DC=local"
+    politica_senha:
+      tamanho_minimo: 10
+      exigir_minuscula: false
+      exigir_maiuscula: false
+      exigir_numero: false
+      exigir_caractere_especial: false
+      chars_especiais: ""
+      dias_expiracao: 60
