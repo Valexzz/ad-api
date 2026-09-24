@@ -1,0 +1,20 @@
+ads:
+  ad1:
+    servidor: "ldap.ad1.local"
+    dominio: "ad1.local"
+    dominio_netbios: "AD1"
+    usuario_service_account: "svc_prefeitura@ad1.local"
+    env_senha_service_account: "AD_1_SENHA" # Mesmo nome da variável .env
+    env_chave_api_hash: "AD_1_CHAVE_API" # Mesmo nome da variável .env
+    dn_base: "DC=ad1,DC=local"
+    dn_padrao: "OU=Usuarios,DC=ad1,DC=local"
+
+  ad2:
+    servidor: "ldap.ad2.local"
+    dominio: "ad2.local"
+    dominio_netbios: "AD2"
+    usuario_service_account: "svc_prefeitura@ad2.local"
+    env_senha_service_account: "AD_2_SENHA" # Mesmo nome da variável .env
+    env_chave_api_hash: "AD_2_CHAVE_API" # Mesmo nome da variável .env
+    dn_base: "DC=ad2,DC=local"
+    dn_padrao: "OU=Usuarios,DC=ad2,DC=local"

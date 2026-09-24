@@ -1,0 +1,10 @@
+ads:
+  ad_fake:
+    servidor: "server_ad_fake"
+    dominio: "fake.local"
+    dominio_netbios: "FAKE"
+    usuario_service_account: "cn=admin,dc=fake,dc=local"
+    env_senha_service_account: "AD_FAKE_SENHA_SERVICE_ACCOUNT" # Mesmo nome da variável .env
+    env_chave_api_hash: "AD_FAKE_CHAVE_API_HASH" # Mesmo nome da variável .env
+    dn_base: "DC=fake,DC=local"
+    dn_padrao: "DC=fake,DC=local"

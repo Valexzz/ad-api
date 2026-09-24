@@ -1,5 +1,5 @@
-from datetime import datetime, timezone, timedelta
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from ldap3 import MODIFY_REPLACE
@@ -8,13 +8,13 @@ from ldap3.utils.conv import escape_filter_chars
 from ldap3.utils.dn import escape_rdn
 
 from ad_api.adapters.conn import LdapClient
-from ad_api.config import settings
-from ad_api.domain.model import StatusUsuario, Usuario, StatusSenha
+from ad_api.domain.model import StatusSenha, StatusUsuario, Usuario
 from ad_api.domain.ports import UsuarioRepository
 from ad_api.errors import (
     InfraError,
     UsuarioJaExisteError,
-    UsuarioSemLoginError, UsuarioNaoEncontradoError,
+    UsuarioNaoEncontradoError,
+    UsuarioSemLoginError,
 )
 from ad_api.utils import obter_valor_atributo_ad
 
@@ -22,20 +22,22 @@ logger = logging.getLogger(__name__)
 
 
 class UsuarioLdapRepository(UsuarioRepository):
-    HEX_CONTA_INATIVA = 0x0002 # 514
-    HEX_CONTA_NORMAL = 0x0200  # 512
+    HEX_CONTA_INATIVA = 0x0002  # 514
+    HEX_CONTA_NORMAL = 0x0200   # 512
 
     def __init__(
             self,
             ldap_client: LdapClient,
-            base_dn: Optional[str] = None,
-            dn_padrao: Optional[str] = None,
-            dias_expiracao_senha_ad: Optional[int] = None,
+            dn_base: str,
+            dn_padrao: str,
+            dominio: str,
+            dias_expiracao_senha_ad: int = 90,
     ):
         self.ldap_client = ldap_client
-        self.base_dn = base_dn or settings.dn_base_ad
-        self.dn_padrao = dn_padrao or getattr(settings, "dn_padrao_ad", self.base_dn)
-        self.dias_expiracao_senha_ad = dias_expiracao_senha_ad or getattr(settings, "dias_expiracao_senha_ad", 90)
+        self.dn_base = dn_base
+        self.dn_padrao = dn_padrao
+        self.dominio = dominio
+        self.dias_expiracao_senha_ad = dias_expiracao_senha_ad
 
     def buscar_por_login(self, login: str) -> Optional[Usuario]:
         logger.debug(f"[LDAP_BUSCAR] - Iniciando busca no AD para o login: {login}")
@@ -45,7 +47,7 @@ class UsuarioLdapRepository(UsuarioRepository):
 
         with self.ldap_client.get_conn() as conn:
             conn.search(
-                search_base=self.base_dn,
+                search_base=self.dn_base,
                 search_filter=filtro,
                 attributes=atributos,
             )
@@ -121,7 +123,7 @@ class UsuarioLdapRepository(UsuarioRepository):
 
         atributos = {
             "sAMAccountName": usuario.login,
-            "userPrincipalName": f"{usuario.login}@{getattr(settings, 'dominio_ad', 'empresa.local')}",
+            "userPrincipalName": f"{usuario.login}@{self.dominio}",  # Agora usa o domínio dinâmico do AD
             "unicodePwd": senha_codificada,
             "userAccountControl": uac,
         }
@@ -190,7 +192,7 @@ class UsuarioLdapRepository(UsuarioRepository):
 
     def _obter_dados_iniciais(self, conn, login: str) -> tuple[str, int]:
         conn.search(
-            search_base=self.base_dn,
+            search_base=self.dn_base,
             search_filter=f"(sAMAccountName={login})",
             attributes=["userAccountControl"]
         )
@@ -250,7 +252,7 @@ class UsuarioLdapRepository(UsuarioRepository):
         with self.ldap_client.get_conn() as conn:
             try:
                 conn.search(
-                    search_base=self.base_dn,
+                    search_base=self.dn_base,
                     search_filter=f"(sAMAccountName={login})",
                     attributes=["sAMAccountName"]
                 )

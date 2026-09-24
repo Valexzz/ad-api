@@ -18,3 +18,6 @@ class SenhaInvalidaError(DomainError):
 
 class UsuarioJaExisteError(DomainError):
     pass
+
+class ADNaoEncontrado(DomainError):
+    pass

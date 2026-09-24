@@ -21,7 +21,8 @@ site_build
 venv
 docs.zip
 archive.zip
-
+config.yml
+config.yml
 # vim temporary files
 *~
 .*.sw?

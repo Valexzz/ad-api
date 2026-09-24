@@ -75,3 +75,13 @@ def chave_api_invalida_handler(request: Request, exc: Exception) -> JSONResponse
             "mensagem": str(exc)
         }
     )
+
+def ad_nao_encontrado_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.warning(f"[AD_NAO_ENCONTRADO] - AD da requisição não encontrado. Detalhes: {str(exc)} ")
+    return JSONResponse(
+        status_code=404,
+        content={
+            "codigo": "AD_NAO_ENCONTRADO",
+            "mensagem": str(exc)
+        }
+    )

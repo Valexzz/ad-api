@@ -1,20 +1,22 @@
 import time
 from contextlib import contextmanager
+from copy import deepcopy
 from typing import Optional
 
 import pytest
-from ldap3 import Server, Connection, MOCK_SYNC, OFFLINE_AD_2012_R2
+from fastapi.testclient import TestClient
+from ldap3 import MOCK_SYNC, OFFLINE_AD_2012_R2, Connection, Server
 from testcontainers.core.container import DockerContainer
 
 from ad_api.adapters.conn import LdapClient
 from ad_api.adapters.usuario_ldap_repository import UsuarioLdapRepository
-from ad_api.api.dependencies import get_usuario_service, verificar_api_key
-from ad_api.domain.model import Usuario, StatusUsuario
+from ad_api.api.dependencies import get_perfil_ad_autenticado, get_usuario_service
+from ad_api.config import PerfilAD, settings, ad_config
+from ad_api.domain.model import PoliticaSenha, StatusUsuario, Usuario
 from ad_api.domain.ports import UsuarioRepository
 from ad_api.errors import UsuarioNaoEncontradoError
 from ad_api.main import app
 from ad_api.services.usuario_service import UsuarioService
-from fastapi.testclient import TestClient
 
 # Constantes - Usuário Ativo Completo
 LOGIN_USUARIO_ATIVO = "victor"
@@ -42,13 +44,14 @@ PRIMEIRO_NOME_SEM_SEGUNDO_NOME = "Lucas"
 MATRICULA_SEM_SEGUNDO_NOME = "44556"
 
 LOGIN_INEXISTENTE = "usuario.inexistente"
-
 LOGIN_USUARIO_INATIVO_INTEGRACAO = "usuario.inativo"
 
 
 class FakeLdapClient(LdapClient):
     def __init__(self, conn: Connection):
         self._conn = conn
+        self._timeout = 5
+        self._use_ssl = False
 
     @contextmanager
     def get_conn(self):
@@ -57,7 +60,6 @@ class FakeLdapClient(LdapClient):
 
 class FakeUsuarioRepository(UsuarioRepository):
     def __init__(self, usuarios: list[Usuario] | None = None):
-
         self._usuarios = {u.login: u for u in (usuarios or [])}
         self.ultimo_usuario_criado = None
         self.ultima_senha = None
@@ -122,6 +124,25 @@ class FakeUsuarioRepository(UsuarioRepository):
         return usuario
 
 
+# ==============================================================================
+# Fixtures Base / Domínio
+# ==============================================================================
+
+@pytest.fixture
+def politica_padrao():
+    return PoliticaSenha(
+        tamanho_minimo=4,
+        exigir_minuscula=False,
+        exigir_maiuscula=False,
+        exigir_numero=False,
+        exigir_caractere_especial=False,
+    )
+
+
+# ==============================================================================
+# Fixtures Mock LDAP (Testes Rápidos de Repositório)
+# ==============================================================================
+
 @pytest.fixture
 def ldap_mock_conn():
     server = Server("server_ad_fake", get_info=OFFLINE_AD_2012_R2)
@@ -148,7 +169,6 @@ def ldap_mock_conn():
             "employeeID": MATRICULA_USUARIO_ATIVO,
         },
     )
-    # 2. Usuário Inativo
     conn.strategy.add_entry(
         f"CN={LOGIN_USUARIO_INATIVO},OU=Users,DC=fake,DC=local",
         {
@@ -161,8 +181,6 @@ def ldap_mock_conn():
             "employeeID": MATRICULA_USUARIO_INATIVO,
         },
     )
-
-    # 3. Usuário sem Matrícula
     conn.strategy.add_entry(
         f"CN={LOGIN_SEM_MATRICULA},OU=Users,DC=fake,DC=local",
         {
@@ -174,8 +192,6 @@ def ldap_mock_conn():
             "userAccountControl": 512,
         },
     )
-
-    # 4. Usuário sem Primeiro Nome
     conn.strategy.add_entry(
         f"CN={LOGIN_SEM_PRIMEIRO_NOME},OU=Users,DC=fake,DC=local",
         {
@@ -187,8 +203,6 @@ def ldap_mock_conn():
             "employeeID": MATRICULA_SEM_PRIMEIRO_NOME,
         },
     )
-
-    # 5. Usuário sem Segundo Nome
     conn.strategy.add_entry(
         f"CN={LOGIN_SEM_SEGUNDO_NOME},OU=Users,DC=fake,DC=local",
         {
@@ -203,10 +217,28 @@ def ldap_mock_conn():
 
     return conn
 
+
 @pytest.fixture
 def fake_ldap_client(ldap_mock_conn):
-    """Fixture utilitária que devolve o client pronto a ser injetado."""
     return FakeLdapClient(ldap_mock_conn)
+
+
+@pytest.fixture
+def repo(fake_ldap_client):
+    dn_base = "DC=fake,DC=local"
+    return UsuarioLdapRepository(
+        ldap_client=fake_ldap_client,
+        dn_base=dn_base,
+        dn_padrao=f"OU=Users,{dn_base}",
+        dominio="fake.local",
+        dias_expiracao_senha_ad=90,
+    )
+
+
+# ==============================================================================
+# Fixtures Samba Container & FastAPI TestClient
+# ==============================================================================
+
 @pytest.fixture(scope="session")
 def samba_ad_container():
     container = (
@@ -231,16 +263,12 @@ def samba_ad_container():
             '--surname="Milhomem" '
             '--mail-address="victor@empresa.local"'
         )
-
-        # --- ADICIONE ESTE BLOCO PARA CRIAR E DESATIVAR UM USUÁRIO PARA OS TESTES DE REATIVAÇÃO ---
         container.exec(
             'samba-tool user create usuario.inativo Mudar@1234 '
             '--given-name="Usuario" '
             '--surname="Inativo"'
         )
-        # Comando do Samba para desativar a conta logo na criação
-        container.exec('samba-tool user disable usuario.inativo')
-        # ---------------------------------------------------------------------------------------
+        container.exec("samba-tool user disable usuario.inativo")
 
         host_ip = container.get_container_host_ip()
         mapped_port_636 = int(container.get_exposed_port(636))
@@ -254,48 +282,93 @@ def samba_ad_container():
             "bind_password": "MinhaSenhaForte123",
         }
 
-def override_verificar_api_key():
-    return "chave-valida-de-teste"
 
-#Por padrão, noa necessita de validar chave de API
 @pytest.fixture
-def client_com_ad(samba_ad_container):
-    """Configura o FastAPI para usar o container do Samba e retorna o TestClient."""
+def client_com_ad(samba_ad_container, politica_padrao):
+    """Configura o FastAPI ignorando a autenticação e apontando para o Samba AD."""
     real_client = LdapClient(
-        server=samba_ad_container["host"],
-        port=samba_ad_container["port"],
-        user=f"Administrator@{samba_ad_container['domain']}",
-        password=samba_ad_container["bind_password"],
+        servidor=samba_ad_container["host"],
+        porta=samba_ad_container["port"],
+        usuario=f"Administrator@{samba_ad_container['domain']}",
+        senha=samba_ad_container["bind_password"],
         use_ssl=True,
     )
 
     def override_get_service():
-        repository = UsuarioLdapRepository(ldap_client=real_client, base_dn=samba_ad_container["base_dn"])
-        return UsuarioService(usuario_repository=repository)
+        repository = UsuarioLdapRepository(
+            ldap_client=real_client,
+            dn_base=samba_ad_container["base_dn"],
+            dn_padrao=f"CN=Users,{samba_ad_container['base_dn']}",
+            dominio=samba_ad_container["domain"],
+            dias_expiracao_senha_ad=90,
+        )
+        # Usa a política completa necessária para validação de senha nos testes de integração
+        politica_integracao = PoliticaSenha(
+            tamanho_minimo=8,
+            exigir_minuscula=True,
+            exigir_maiuscula=True,
+            exigir_numero=True,
+            exigir_caractere_especial=True,
+            chars_especiais=r"!@#$%&*",
+        )
+        return UsuarioService(
+            usuario_repository=repository,
+            politica_senha=politica_integracao,
+        )
+
+    perfil_fake = PerfilAD(
+        servidor=samba_ad_container["host"],
+        dominio=samba_ad_container["domain"],
+        dominio_netbios="FAKE",
+        usuario_service_account="admin",
+        senha_service_account="pass",
+        env_senha_service_account="",
+        chave_api_hash="fake-key",
+        env_chave_api_hash="",
+        dn_base=samba_ad_container["base_dn"],
+        dn_padrao=f"CN=Users,{samba_ad_container['base_dn']}",
+    )
 
     app.dependency_overrides[get_usuario_service] = override_get_service
-
-    app.dependency_overrides[verificar_api_key] = override_verificar_api_key
+    app.dependency_overrides[get_perfil_ad_autenticado] = lambda: perfil_fake
 
     with TestClient(app) as client:
         yield client
 
     app.dependency_overrides.clear()
 
-# Fixture SEM OVERRIDE da API Key (para testar a segurança exigida no RNF01)
+
 @pytest.fixture
 def client_sem_override_api_key(samba_ad_container):
+    """Mantém a validação real de API Key ativa."""
     real_client = LdapClient(
-        server=samba_ad_container["host"],
-        port=samba_ad_container["port"],
-        user=f"Administrator@{samba_ad_container['domain']}",
-        password=samba_ad_container["bind_password"],
+        servidor=samba_ad_container["host"],
+        porta=samba_ad_container["port"],
+        usuario=f"Administrator@{samba_ad_container['domain']}",
+        senha=samba_ad_container["bind_password"],
         use_ssl=True,
     )
 
     def override_get_service():
-        repository = UsuarioLdapRepository(ldap_client=real_client, base_dn=samba_ad_container["base_dn"])
-        return UsuarioService(usuario_repository=repository)
+        repository = UsuarioLdapRepository(
+            ldap_client=real_client,
+            dn_base=samba_ad_container["base_dn"],
+            dn_padrao=f"CN=Users,{samba_ad_container['base_dn']}",
+            dominio=samba_ad_container["domain"],
+            dias_expiracao_senha_ad=90,
+        )
+        politica_integracao = PoliticaSenha(
+            tamanho_minimo=8,
+            exigir_minuscula=True,
+            exigir_maiuscula=True,
+            exigir_numero=True,
+            exigir_caractere_especial=True,
+            chars_especiais=r"!@#$%&*",
+        )
+        return UsuarioService(
+            usuario_repository=repository,
+            politica_senha=politica_integracao,
+        )
 
     app.dependency_overrides[get_usuario_service] = override_get_service
 
@@ -303,3 +376,25 @@ def client_sem_override_api_key(samba_ad_container):
         yield client
 
     app.dependency_overrides.clear()
+
+@pytest.fixture
+def mock_multiplos_ads(monkeypatch):
+    """
+    Garante que existam ao menos dois perfis configurados em ad_config.ads:
+    - O padrão (apontando para o container real do Samba).
+    - Um secundário 'ad2' com uma chave de API distinta.
+    """
+    nome_padrao = settings.ad_padrao
+    perfil_original = ad_config.ads[nome_padrao]
+
+    # Clona o perfil original mudando o identificador e a chave
+    perfil_ad2 = deepcopy(perfil_original)
+    perfil_ad2.chave_api_hash = "chave-secreta-ad2"
+
+    novos_ads = {
+        nome_padrao: perfil_original,
+        "ad2": perfil_ad2,
+    }
+
+    monkeypatch.setattr(ad_config, "ads", novos_ads)
+    return nome_padrao, "ad2"

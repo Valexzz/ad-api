@@ -3,7 +3,6 @@ from unittest.mock import patch
 import pytest
 from typing import Optional
 
-from ad_api.config import settings
 from ad_api.domain.model import Usuario, StatusUsuario, PoliticaSenha
 from ad_api.domain.ports import UsuarioRepository
 from ad_api.services.usuario_service import UsuarioService
@@ -19,7 +18,7 @@ from tests.conftest import FakeUsuarioRepository
 # Testes: Recuperar Usuário
 # ==============================================================================
 
-def test_deve_retornar_usuario_quando_login_existir():
+def test_deve_retornar_usuario_quando_login_existir(politica_padrao):
     usuario_existente = Usuario(
         login="joao.silva",
         primeiro_nome="João",
@@ -28,7 +27,7 @@ def test_deve_retornar_usuario_quando_login_existir():
         matricula="12345",
     )
     repo = FakeUsuarioRepository(usuarios=[usuario_existente])
-    service = UsuarioService(usuario_repository=repo)
+    service = UsuarioService(usuario_repository=repo, politica_senha=politica_padrao)
 
     resultado = service.buscar_usuario_por_login("joao.silva")
 
@@ -36,9 +35,9 @@ def test_deve_retornar_usuario_quando_login_existir():
     assert resultado.nome_completo == "João Silva"
 
 
-def test_deve_lancar_excecao_quando_usuario_nao_existir():
+def test_deve_lancar_excecao_quando_usuario_nao_existir(politica_padrao):
     repo = FakeUsuarioRepository(usuarios=[])
-    service = UsuarioService(usuario_repository=repo)
+    service = UsuarioService(usuario_repository=repo, politica_senha=politica_padrao)
 
     with pytest.raises(UsuarioNaoEncontradoError) as exc_info:
         service.buscar_usuario_por_login("login.inexistente")
@@ -163,30 +162,6 @@ def test_deve_retornar_erro_senha_minima_somente_com_este_criterio_definido():
     assert "conter ao menos um número" not in mensagem
     assert "conter ao menos um caractere especial" not in mensagem
 
-def test_deve_ler_as_settings_caso_politica_nao_informada_e_retornar_erro_em_senha_toda_invalida():
-    repo = FakeUsuarioRepository(usuarios=[])
-
-    # Instancia o service sem passar politica_senha (deve assumir defaults via settings)
-    with patch.object(settings, "tamanho_minimo_senha_ad", 8), \
-            patch.object(settings, "exigir_numero_senha_ad", True), \
-            patch.object(settings, "exigir_minuscula_senha_ad", True), \
-            patch.object(settings, "exigir_maiuscula_senha_ad", True), \
-            patch.object(settings, "exigir_caractere_especial_senha_ad", True), \
-            patch.object(settings, "chars_especiais_senha_ad", "!@#$%&*"):
-
-        service = UsuarioService(usuario_repository=repo, politica_senha=None)
-        novo_usuario = Usuario.criar(login="teste.settings", nome_completo="Teste Settings")
-
-        with pytest.raises(SenhaInvalidaError) as exc_info:
-            service.criar_usuario(usuario=novo_usuario, senha="")
-
-        mensagem = str(exc_info.value)
-        assert "ter no mínimo 8 caracteres" in mensagem
-        assert "conter ao menos uma letra minúscula" in mensagem
-        assert "conter ao menos uma letra maiúscula" in mensagem
-        assert "conter ao menos um número" in mensagem
-        assert "conter ao menos um caractere especial (!@#$%&*)" in mensagem
-
 def test_deve_lancar_exceca_ao_tentar_criar_usuario_com_login_duplicado():
     usuario_existente = Usuario.criar(login="usuario.existente", nome_completo="Usuario Existente")
     repo = FakeUsuarioRepository(usuarios=[usuario_existente])
@@ -201,19 +176,16 @@ def test_deve_lancar_exceca_ao_tentar_criar_usuario_com_login_duplicado():
     assert "Usuário com o login usuario.existente já existe" in str(exc_info.value)
 
 
-def test_deve_repassar_parametro_opcional_padrao_de_dn_e_forcar_senha_ao_nao_ser_informado():
+def test_deve_repassar_container_dn_none_quando_nao_informado(politica_padrao):
     repo = FakeUsuarioRepository(usuarios=[])
-    politica = PoliticaSenha(tamanho_minimo=4, exigir_minuscula=False, exigir_maiuscula=False, exigir_numero=False, exigir_caractere_especial=False)
+    service = UsuarioService(usuario_repository=repo, politica_senha=politica_padrao)
+    usuario = Usuario.criar(login="teste.default", nome_completo="Teste Default")
 
-    with patch.object(settings, "dn_padrao_ad", "OU=Usuarios,DC=empresa,DC=local"):
-        service = UsuarioService(usuario_repository=repo, politica_senha=politica)
-        usuario = Usuario.criar(login="teste.default", nome_completo="Teste Default")
+    # Não informa container_dn: o service deve repassar None ao repositório
+    service.criar_usuario(usuario=usuario, senha="Password123")
 
-        # Não informa forcar_troca_senha nem container_dn
-        service.criar_usuario(usuario=usuario, senha="Password123")
-
-        assert repo.ultimo_container_dn == "OU=Usuarios,DC=empresa,DC=local"
-        assert repo.ultimo_forcar_troca_senha is False
+    assert repo.ultimo_container_dn is None
+    assert repo.ultimo_forcar_troca_senha is False
 
 # ==============================================================================
 # Testes: Reativar Usuário
@@ -248,15 +220,14 @@ def test_deve_reativar_usuario_com_sucesso():
     assert resultado.status == StatusUsuario.ATIVO
 
 
-def test_deve_lancar_excecao_ao_tentar_reativar_usuario_inexistente():
+def test_deve_lancar_excecao_ao_tentar_reativar_usuario_inexistente(politica_padrao):
     repo = FakeUsuarioRepository(usuarios=[])
-    service = UsuarioService(usuario_repository=repo)
+    service = UsuarioService(usuario_repository=repo, politica_senha=politica_padrao)
 
     with pytest.raises(UsuarioNaoEncontradoError) as exc_info:
         service.reativar_usuario(login="usuario.fantasma", senha="NewPassword@123")
 
     assert "Usuário com login usuario.fantasma não encontrado" in str(exc_info.value)
-
 
 def test_deve_lancar_excecao_ao_reativar_usuario_com_senha_invalida():
     usuario_inativo = Usuario(
@@ -280,7 +251,7 @@ def test_deve_lancar_excecao_ao_reativar_usuario_com_senha_invalida():
     assert repo.ultimo_login_reativado is None
 
 
-def test_deve_reativar_usuario_sem_informar_senha_nova():
+def test_deve_reativar_usuario_sem_informar_senha_nova(politica_padrao):
     usuario_inativo = Usuario(
         login="carlos.inativo",
         primeiro_nome="Carlos",
@@ -288,9 +259,8 @@ def test_deve_reativar_usuario_sem_informar_senha_nova():
         status=StatusUsuario.INATIVO,
     )
     repo = FakeUsuarioRepository(usuarios=[usuario_inativo])
-    service = UsuarioService(usuario_repository=repo)
+    service = UsuarioService(usuario_repository=repo, politica_senha=politica_padrao)
 
-    # Reativa sem passar o parâmetro de senha
     resultado = service.reativar_usuario(
         login="carlos.inativo",
         container_dn="OU=Ativos,DC=empresa,DC=local"
@@ -300,7 +270,6 @@ def test_deve_reativar_usuario_sem_informar_senha_nova():
     assert repo.ultima_senha_reativacao is None
     assert repo.ultimo_container_reativacao == "OU=Ativos,DC=empresa,DC=local"
     assert resultado.status == StatusUsuario.ATIVO
-
 # ==============================================================================
 # Testes: Redefinir Senha (Service)
 # ==============================================================================
@@ -330,9 +299,9 @@ def test_deve_redefinir_senha_com_sucesso():
     assert resultado == usuario_existente
 
 
-def test_deve_lancar_excecao_ao_tentar_redefinir_senha_de_usuario_inexistente():
+def test_deve_lancar_excecao_ao_tentar_redefinir_senha_de_usuario_inexistente(politica_padrao):
     repo = FakeUsuarioRepository(usuarios=[])
-    service = UsuarioService(usuario_repository=repo)
+    service = UsuarioService(usuario_repository=repo, politica_senha=politica_padrao)
 
     with pytest.raises(UsuarioNaoEncontradoError) as exc_info:
         service.redefinir_senha(login="fantasma", senha="NewPassword@123")
