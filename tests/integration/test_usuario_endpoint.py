@@ -268,12 +268,8 @@ def test_redefinir_senha_com_senha_fraca_deve_retornar_status_400(client_com_ad)
 # ==============================================================================
 # Testes de Integração: Chave de API e mudança de AD
 # ==============================================================================
-
-def test_deve_permitir_acesso_com_api_key_valida(client_sem_override_api_key):
-    nome_ad = settings.ad_padrao
-    chave_esperada = ad_config.ads[nome_ad].chave_api_hash
-
-    headers = {"x-api-key": chave_esperada}
+def test_deve_permitir_acesso_com_api_key_valida(client_sem_override_api_key, mock_multiplos_ads):
+    headers = {"x-api-key": mock_multiplos_ads["chave_padrao"]}
 
     response = client_sem_override_api_key.get(
         f"/usuarios/{LOGIN_USUARIO_ATIVO}",
@@ -286,25 +282,29 @@ def test_deve_permitir_acesso_com_api_key_valida(client_sem_override_api_key):
 
 
 def test_deve_retornar_401_ao_tentar_acessar_sem_api_key_ou_com_chave_invalida(client_sem_override_api_key):
+    # 1. Sem header
     response_sem_chave = client_sem_override_api_key.get(f"/usuarios/{LOGIN_USUARIO_ATIVO}")
     assert response_sem_chave.status_code == 401
-    assert response_sem_chave.json()["codigo"] == "CHAVE_API_INVALIDA" # (ou o código que seu handler de 401 retorna)
+    assert response_sem_chave.json()["codigo"] == "CHAVE_API_INVALIDA"
 
-    headers = {"x-api-key": "chave-errada-123"}
+    # 2. Com chave incorreta em texto plano
+    headers = {"x-api-key": "chave-totalmente-errada"}
     response_chave_errada = client_sem_override_api_key.get(
         f"/usuarios/{LOGIN_USUARIO_ATIVO}",
-        headers=headers
+        headers=headers,
     )
     assert response_chave_errada.status_code == 401
+    assert response_chave_errada.json()["codigo"] == "CHAVE_API_INVALIDA"
+
 
 def test_deve_permitir_acesso_com_query_param_ad_explicito(client_sem_override_api_key, mock_multiplos_ads):
-    nome_padrao, _ = mock_multiplos_ads
-    chave_ad_padrao = ad_config.ads[nome_padrao].chave_api_hash
+    nome_ad = mock_multiplos_ads["ad_padrao"]
+    chave = mock_multiplos_ads["chave_padrao"]
 
-    headers = {"x-api-key": chave_ad_padrao}
+    headers = {"x-api-key": chave}
 
     response = client_sem_override_api_key.get(
-        f"/usuarios/{LOGIN_USUARIO_ATIVO}?ad={nome_padrao}",
+        f"/usuarios/{LOGIN_USUARIO_ATIVO}?ad={nome_ad}",
         headers=headers,
     )
 
@@ -314,12 +314,9 @@ def test_deve_permitir_acesso_com_query_param_ad_explicito(client_sem_override_a
 
 
 def test_deve_permitir_acesso_ao_ad_padrao_quando_query_param_ad_for_omitido(client_sem_override_api_key, mock_multiplos_ads):
-    nome_padrao, _ = mock_multiplos_ads
-    chave_ad_padrao = ad_config.ads[nome_padrao].chave_api_hash
+    chave = mock_multiplos_ads["chave_padrao"]
+    headers = {"x-api-key": chave}
 
-    headers = {"x-api-key": chave_ad_padrao}
-
-    # Não passa ?ad= na URL -> Deve assumir settings.ad_padrao
     response = client_sem_override_api_key.get(
         f"/usuarios/{LOGIN_USUARIO_ATIVO}",
         headers=headers,
@@ -331,10 +328,10 @@ def test_deve_permitir_acesso_ao_ad_padrao_quando_query_param_ad_for_omitido(cli
 
 
 def test_deve_retornar_401_ao_tentar_usar_chave_do_ad1_para_acessar_ad2(client_sem_override_api_key, mock_multiplos_ads):
-    nome_padrao, nome_ad2 = mock_multiplos_ads
-    chave_ad1 = ad_config.ads[nome_padrao].chave_api_hash
+    chave_ad1 = mock_multiplos_ads["chave_padrao"]
+    nome_ad2 = mock_multiplos_ads["ad2"]
 
-    # Envia a chave do AD1, mas requisita o AD2
+    # Envia a chave do AD1 requisitando o AD2
     headers = {"x-api-key": chave_ad1}
 
     response = client_sem_override_api_key.get(

@@ -1,3 +1,4 @@
+import hashlib
 from typing import Optional
 
 from fastapi import Security, HTTPException, Query, Depends
@@ -33,7 +34,9 @@ def get_perfil_ad_autenticado(
             f"Perfil de AD '{nome_ad}' não encontrado",
         )
 
-    if not hmac.compare_digest(api_key, perfil.chave_api_hash):
+    api_key_hash_recebida = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+
+    if not hmac.compare_digest(api_key_hash_recebida, perfil.chave_api_hash):
         raise ChaveApiInvalidaError(f"Chave de API inválida para o AD '{nome_ad}'")
 
     return perfil

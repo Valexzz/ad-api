@@ -1,3 +1,4 @@
+import hashlib
 import time
 from contextlib import contextmanager
 from copy import deepcopy
@@ -378,19 +379,22 @@ def client_sem_override_api_key(samba_ad_container):
 
     app.dependency_overrides.clear()
 
+CHAVE_PLANA_PADRAO = "segredo-ad-padrao-123"
+CHAVE_PLANA_AD2 = "segredo-ad-secundario-456"
+
 @pytest.fixture
 def mock_multiplos_ads(monkeypatch):
     """
-    Garante que existam ao menos dois perfis configurados em ad_config.ads:
-    - O padrão (apontando para o container real do Samba).
-    - Um secundário 'ad2' com uma chave de API distinta.
+    Garante que os perfis em memória possuam o hash SHA-256
+    correspondente às chaves em texto plano enviadas nos testes.
     """
     nome_padrao = settings.ad_padrao
-    perfil_original = ad_config.ads[nome_padrao]
+    perfil_original = deepcopy(ad_config.ads[nome_padrao])
 
-    # Clona o perfil original mudando o identificador e a chave
+    perfil_original.chave_api_hash = hashlib.sha256(CHAVE_PLANA_PADRAO.encode()).hexdigest()
+
     perfil_ad2 = deepcopy(perfil_original)
-    perfil_ad2.chave_api_hash = "chave-secreta-ad2"
+    perfil_ad2.chave_api_hash = hashlib.sha256(CHAVE_PLANA_AD2.encode()).hexdigest()
 
     novos_ads = {
         nome_padrao: perfil_original,
@@ -398,4 +402,10 @@ def mock_multiplos_ads(monkeypatch):
     }
 
     monkeypatch.setattr(ad_config, "ads", novos_ads)
-    return nome_padrao, "ad2"
+
+    return {
+        "ad_padrao": nome_padrao,
+        "chave_padrao": CHAVE_PLANA_PADRAO,
+        "ad2": "ad2",
+        "chave_ad2": CHAVE_PLANA_AD2,
+    }

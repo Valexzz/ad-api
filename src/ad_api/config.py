@@ -60,7 +60,8 @@ class AdConfig(BaseModel):
 
             env_chave = perfil.get("env_chave_api_hash")
             perfil["chave_api_hash"] = os.getenv(env_chave, "") if env_chave else ""
-
+            # SÓ PRA TESTES TIRAR DEPOIS
+            print(perfil)
         return cls(**data)
 
 ad_config = AdConfig.carregar_de_yaml(getattr(settings, "caminho_arquivo_yml", "config.yml"))

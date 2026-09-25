@@ -2,7 +2,8 @@ import pytest
 from fastapi import HTTPException
 from ad_api.api.dependencies import get_perfil_ad_autenticado, get_usuario_service
 from ad_api.config import ad_config, settings, PerfilAD, PoliticaSenhaConfig
-from ad_api.errors import ChaveApiInvalidaError
+from ad_api.errors import ChaveApiInvalidaError, ADNaoEncontrado
+
 
 @pytest.fixture(autouse=True)
 def mock_perfis_ad(monkeypatch):
@@ -14,7 +15,8 @@ def mock_perfis_ad(monkeypatch):
             usuario_service_account="svc1",
             senha_service_account="pwd1",
             env_senha_service_account="",
-            chave_api_hash="hash_ad1",
+            #hash_ad1
+            chave_api_hash="3c81dc77f7fb87a50e4432701fa0f31b4ae221da36dcd7fc53b3f424dc1f7ba6",
             env_chave_api_hash="",
             dn_base="DC=ad1,DC=local",
             dn_padrao="OU=Users,DC=ad1,DC=local",
@@ -26,7 +28,8 @@ def mock_perfis_ad(monkeypatch):
             usuario_service_account="svc2",
             senha_service_account="pwd2",
             env_senha_service_account="",
-            chave_api_hash="hash_ad2",
+            #hash_ad2
+            chave_api_hash="ffc44e226865c4ab3204ced983d9a3be3e495e4b041fc2d0b3b319ad3554033e",
             env_chave_api_hash="",
             dn_base="DC=ad2,DC=local",
             dn_padrao="OU=Users,DC=ad2,DC=local",
@@ -47,10 +50,9 @@ def test_deve_rejeitar_chave_do_ad1_ao_solicitar_ad2():
     with pytest.raises(ChaveApiInvalidaError):
         get_perfil_ad_autenticado(ad="ad2", api_key="hash_ad1")
 
-def test_deve_lancar_404_para_ad_inexistente():
-    with pytest.raises(HTTPException) as exc_info:
+def test_deve_lancar_ad_nao_encontrado_para_ad_inexistente():
+    with pytest.raises(ADNaoEncontrado):
         get_perfil_ad_autenticado(ad="fantasma", api_key="hash_ad1")
-    assert exc_info.value.status_code == 404
 
 def test_deve_instanciar_service_com_politica_e_repositorio_do_perfil():
     perfil = PerfilAD(

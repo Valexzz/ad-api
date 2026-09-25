@@ -1,5 +1,7 @@
 services:
   ad-api:
+    volumes:
+      - ./config.yml:/app/config.yml
     image: ad_api
     build:
       context: .
